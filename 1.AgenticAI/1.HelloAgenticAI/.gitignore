@@ -1,0 +1,33 @@
+# Project-specific ignores. Repo-root .gitignore covers Python/IDE/OS basics.
+
+# azd local environment state (contains tenant/subscription/resource ids)
+.azure/
+
+# Local environment overrides
+.env
+.env.*
+!.env.example
+
+# uv virtualenv (covered by repo root, restated for clarity)
+.venv/
+
+# Build outputs
+dist/
+build/
+
+# Test/coverage artefacts
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Chainlit runtime
+.chainlit/
+.files/
+
+# Bicep build outputs
+*.json.bicep.tmp
+
+# Docker build context
+.dockerignore.bak

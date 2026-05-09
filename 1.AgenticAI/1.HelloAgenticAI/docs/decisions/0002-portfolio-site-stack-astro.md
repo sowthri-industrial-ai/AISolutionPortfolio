@@ -60,6 +60,32 @@ This decision applies to the portfolio site at `AISolutionPortfolio/portfolio-si
 
 Individual project demos are **not constrained** by this decision — each project chooses the right stack for its own demo. The portfolio site only hosts profile pages and the Launch/Teardown control plane.
 
+## Multi-project support
+
+The portfolio site is **one shared Astro app**, not duplicated per project. Every project in the portfolio (HelloAgenticAI, RefineryDigitalTwin, and any future projects under `1.AgenticAI/`, `2.AssetsAI/`, `3.PhysicalAI/`) gets a profile page on the same site.
+
+Adding a new project to the site requires three additions to the portfolio-site repo only:
+
+1. A markdown file at `src/content/<project-slug>.md` with project frontmatter (title, summary, tech stack, GitHub link, demo metadata, screenshots)
+2. A profile page at `src/pages/<project-slug>.astro` — typically a one-liner that delegates to a shared `<ProjectProfile>` layout component
+3. *(Optional)* screenshots and GIFs in `public/<project-slug>/`
+
+Reusable components, built once, used by every project's profile page:
+
+- `<ProjectCard>` — homepage grid card
+- `<LaunchButton project="<slug>" />` — accepts the project slug as a prop, calls the shared Azure Function with that slug, the Function dispatches the corresponding project's GitHub Actions workflow, which provisions the right RG (`rg-<slug>-{env}`)
+- `<ArchitectureDiagram>` — pulls the mermaid diagram from each project's `docs/ARCHITECTURE.md` automatically
+- `<TechStackTable>`, `<DemoStatusIndicator>`, `<ScreenshotGallery>`, `<GitHubLink>`
+
+Per-project contract — every project, regardless of its internal architecture, must provide:
+
+1. A mermaid architecture diagram in `<project-root>/docs/ARCHITECTURE.md`
+2. A GitHub Actions workflow at `<project-root>/.github/workflows/deploy.yml` accepting `workflow_dispatch` with an `action` input of `provision | deploy | teardown`. Reference shape: `1.AgenticAI/1.HelloAgenticAI/.github/workflows/deploy.yml`.
+3. An `azd up`–deployable Bicep stack that targets a dedicated RG named `rg-<project-slug>-{env}` and outputs the live demo URL via `azd env get-values`
+4. Project metadata in the form expected by the portfolio site's content folder (defined in HelloAgenticAI Phase 5)
+
+**Result:** adding any new project to the portfolio site is ~20 lines of code, not a new website. RefineryDigitalTwin, future agentic projects, future asset-AI projects all plug into the same site through the four-point contract above.
+
 ## References
 
 - `1.AgenticAI/1.HelloAgenticAI/docs/ARCHITECTURE.md` §Publishing strategy

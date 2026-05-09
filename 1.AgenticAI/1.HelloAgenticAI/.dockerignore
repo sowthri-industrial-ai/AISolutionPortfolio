@@ -1,0 +1,31 @@
+# Build artefacts and caches
+.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+*.pyc
+*.pyo
+.DS_Store
+
+# Repo plumbing not needed in the image
+.git/
+.github/
+.azure/
+.editorconfig
+.gitignore
+.pre-commit-config.yaml
+.python-version
+
+# Project files not needed at runtime
+docs/
+infra/
+tests/
+demo-fruitmarket/
+README.md
+CLAUDE.md
+PROJECT_PLAN.md
+
+# Local secrets and env
+.env
+.env.*

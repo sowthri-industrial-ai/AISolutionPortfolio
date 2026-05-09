@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: helloagenticai
+metadata:
+  template: helloagenticai-phase1@0.1.0
+
+infra:
+  provider: bicep
+  path: .
+  module: main
+
+services:
+  agent:
+    project: ..
+    language: python
+    host: containerapp
+    docker:
+      path: ../Dockerfile
+      context: ..

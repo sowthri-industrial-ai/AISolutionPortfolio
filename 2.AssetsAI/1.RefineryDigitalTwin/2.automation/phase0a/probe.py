@@ -197,6 +197,51 @@ def write_json(path, data, log):
 
 
 # ============================================================================
+# Reflection helpers
+#
+# pythonnet exposes DWSIM SimulationObjects via the ISimulationObject interface,
+# which masks concrete-class members (NumberOfStages, PropertyPackage, etc).
+# Reflection through `obj.GetType().GetProperty(name).GetValue(obj, None)`
+# bypasses the masking. Use these helpers for any DWSIM property/method access.
+# ============================================================================
+
+def rget(obj, name, default=None):
+    """Read a .NET property by name via reflection. Returns default on failure."""
+    if obj is None:
+        return default
+    try:
+        prop = obj.GetType().GetProperty(name)
+        if prop is None or not prop.CanRead:
+            return default
+        return prop.GetValue(obj, None)
+    except Exception:
+        return default
+
+
+def rcall(obj, method_name, *args):
+    """Invoke a .NET method by name via reflection.
+
+    Raises AttributeError if no overload matches arg count.
+    Re-raises target exceptions (wrapped or unwrapped) so callers can
+    distinguish "method missing" from "method returned" from "method threw".
+    """
+    if obj is None:
+        raise AttributeError(f"rcall on None ({method_name})")
+    methods = [m for m in obj.GetType().GetMethods() if str(m.Name) == method_name]
+    for m in methods:
+        try:
+            params = m.GetParameters()
+            n_params = params.Length if hasattr(params, 'Length') else len(list(params))
+        except Exception:
+            continue
+        if n_params == len(args):
+            from System import Array, Object
+            arr = Array[Object](list(args))
+            return m.Invoke(obj, arr)
+    raise AttributeError(f"No method {method_name}({len(args)} args) on {obj.GetType().Name}")
+
+
+# ============================================================================
 # Pre-flight
 # ============================================================================
 
@@ -225,26 +270,30 @@ def safe_attr(obj, name, default=None):
 
 
 def get_obj_tag(obj):
-    """GraphicObject.Tag (UI display name)."""
-    try:
-        go = getattr(obj, "GraphicObject", None)
-        if go is not None:
-            v = getattr(go, "Tag", None)
-            if v is not None:
-                return str(v)
-    except Exception:
-        pass
-    # Fallback to .Tag direct
-    v = safe_attr(obj, "Tag")
-    return str(v) if v is not None else ""
+    """GraphicObject.Tag (UI display name). GraphicObject IS on the interface."""
+    go = getattr(obj, "GraphicObject", None)
+    if go is None:
+        go = rget(obj, "GraphicObject")
+    if go is not None:
+        v = getattr(go, "Tag", None) or rget(go, "Tag")
+        if v is not None:
+            return str(v)
+    return ""
 
 
 def get_obj_type_str(obj):
+    """Use .NET runtime concrete class name. Interface is ISimulationObject."""
     try:
-        ot = getattr(obj, "ObjectType", None)
+        n = str(obj.GetType().Name)
+        if n and n != "ISimulationObject":
+            return n
+    except Exception:
+        pass
+    # Fallback paths
+    try:
+        ot = rget(obj, "ObjectType")
         if ot is not None:
             s = str(ot)
-            # Some enums stringify as "Namespace.Class" — strip namespace
             if "." in s:
                 s = s.rsplit(".", 1)[-1]
             return s
@@ -254,41 +303,36 @@ def get_obj_type_str(obj):
 
 
 def get_internal_name(obj):
-    n = safe_attr(obj, "Name")
+    n = rget(obj, "Name")
     if n:
         return str(n)
-    try:
-        go = getattr(obj, "GraphicObject", None)
-        if go is not None:
-            v = getattr(go, "Name", None)
-            if v:
-                return str(v)
-    except Exception:
-        pass
+    go = rget(obj, "GraphicObject")
+    if go is not None:
+        v = getattr(go, "Name", None) or rget(go, "Name")
+        if v:
+            return str(v)
     return ""
 
 
 def is_calculated(obj):
-    v = safe_attr(obj, "Calculated", False)
+    v = rget(obj, "Calculated", False)
     try:
-        return bool(v)
+        return bool(v) if v is not None else False
     except Exception:
         return False
 
 
 def get_pp_name(obj):
-    """Property package name or None."""
-    try:
-        pp = getattr(obj, "PropertyPackage", None)
-        if pp is None:
-            return None
-        for attr in ("ComponentName", "Name", "Tag"):
-            v = getattr(pp, attr, None)
-            if v:
-                return str(v)
-        return type(pp).__name__
-    except Exception:
+    """Property package name or None. Reflection-only on top-level DWSIM obj."""
+    pp = rget(obj, "PropertyPackage")
+    if pp is None:
         return None
+    # pp is a concrete PropertyPackage object — direct access works on this layer
+    for attr in ("ComponentName", "Name", "Tag"):
+        v = getattr(pp, attr, None)
+        if v:
+            return str(v)
+    return type(pp).__name__
 
 
 def subsystem_from_pp_name(pp_name):
@@ -359,18 +403,18 @@ def map_objtype_to_prefix(obj_type_str, category):
 # ============================================================================
 
 def probe_prop_ms(ms, log):
-    """Probe PROP_MS_0..50, stop at first raise OR at 50 (Q3)."""
+    """Probe PROP_MS_0..50 via reflection, stop at first raise OR at 50 (Q3)."""
     results = {}
     for i in range(PROP_MS_MAX_INDEX + 1):
         key = f"PROP_MS_{i}"
         try:
-            val = ms.GetPropertyValue(key)
+            val = rcall(ms, "GetPropertyValue", key)
         except Exception:
             break
         unit = None
         try:
-            unit = ms.GetPropertyUnit(key)
-            unit = str(unit) if unit is not None else None
+            u = rcall(ms, "GetPropertyUnit", key)
+            unit = str(u) if u is not None else None
         except Exception:
             pass
         results[key] = {"value": coerce(val), "unit": unit}
@@ -378,20 +422,34 @@ def probe_prop_ms(ms, log):
 
 
 def get_phases(ms):
-    """Return list of dicts: [{idx, name, phase}]."""
+    """Return list of dicts: [{idx, name, phase}].
+
+    ms.Phases is masked by interface — read via reflection. Phases is a
+    Dictionary<int, IPhase>; iterate by Keys.
+    """
     out = []
-    try:
-        n = ms.Phases.Count
-    except Exception:
+    phases_dict = rget(ms, "Phases")
+    if phases_dict is None:
         return out
-    for i in range(n):
+    try:
+        keys = list(phases_dict.Keys)
+    except Exception:
+        # Fallback: try enumerable
         try:
-            p = ms.Phases[i]
-            out.append({
-                "idx": i,
-                "name": str(getattr(p, "Name", "") or ""),
-                "phase": p,
-            })
+            for i, p in enumerate(phases_dict):
+                out.append({"idx": i, "name": str(rget(p, "Name") or ""), "phase": p})
+        except Exception:
+            pass
+        return out
+    for k in keys:
+        try:
+            p = phases_dict[k]
+            try:
+                idx = int(k)
+            except Exception:
+                idx = k
+            name = str(rget(p, "Name") or "")
+            out.append({"idx": idx, "name": name, "phase": p})
         except Exception:
             continue
     return out

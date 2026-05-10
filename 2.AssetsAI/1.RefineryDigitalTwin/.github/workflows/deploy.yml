@@ -30,8 +30,8 @@ on:
           - provision
           - deploy
           - teardown
-          - resume    # Wave 1 stub — wires to `az fabric capacity resume` in Wave 2
-          - pause     # Wave 1 stub — wires to `az fabric capacity suspend` in Wave 2
+          - resume    # `az kusto cluster start` — wakes ADX cluster from Stopped
+          - pause     # `az kusto cluster stop` — stops ADX cluster ($0 compute)
       environment:
         description: "Environment name (azd env)"
         required: false
@@ -101,28 +101,37 @@ jobs:
             --purge \
             --force
 
-      # Wave 1 stub: Fabric F2 capacity is not provisioned yet. The full
-      # implementation lands in Wave 2 (after operator's Part A tenant setup
-      # produces the work-account UPN and main.bicep wires fabric_capacity.bicep).
-      # Wave 2 swap:
-      #   az fabric capacity resume \
-      #     --name fab-refinerydigitaltwin-${{ inputs.environment }} \
-      #     --resource-group rg-refinerydigitaltwin-${{ inputs.environment }}
-      - name: Resume Fabric capacity (Wave 1 stub)
+      # F1B pivot: ADX cluster pause/resume via `az kusto cluster start/stop`.
+      # Cluster name is discovered at runtime via `az kusto cluster list -g <rg>`
+      # (single cluster per RG by design — safe). No GitHub repo variable
+      # needed; works on a fresh CI runner with no prior azd env state.
+      - name: Resume ADX cluster
         if: inputs.action == 'resume'
         run: |
-          echo "resume: Wave 1 stub — Fabric capacity not yet provisioned."
-          echo "Wave 2 will swap this for: az fabric capacity resume ..."
+          RG="rg-refinerydigitaltwin-${{ inputs.environment }}"
+          CLUSTER=$(az kusto cluster list -g "$RG" --query "[0].name" -o tsv)
+          if [ -z "$CLUSTER" ]; then
+            echo "FATAL: no Kusto cluster found in $RG"; exit 1
+          fi
+          echo "Starting cluster $CLUSTER (this takes ~1-2 min)..."
+          az kusto cluster start -g "$RG" -n "$CLUSTER"
+          echo "Final cluster state:"
+          az kusto cluster show -g "$RG" -n "$CLUSTER" \
+            --query "{name:name, state:state, uri:uri}" -o table
 
-      # Wave 1 stub. Wave 2 swap:
-      #   az fabric capacity suspend \
-      #     --name fab-refinerydigitaltwin-${{ inputs.environment }} \
-      #     --resource-group rg-refinerydigitaltwin-${{ inputs.environment }}
-      - name: Pause Fabric capacity (Wave 1 stub)
+      - name: Pause ADX cluster
         if: inputs.action == 'pause'
         run: |
-          echo "pause: Wave 1 stub — Fabric capacity not yet provisioned."
-          echo "Wave 2 will swap this for: az fabric capacity suspend ..."
+          RG="rg-refinerydigitaltwin-${{ inputs.environment }}"
+          CLUSTER=$(az kusto cluster list -g "$RG" --query "[0].name" -o tsv)
+          if [ -z "$CLUSTER" ]; then
+            echo "FATAL: no Kusto cluster found in $RG"; exit 1
+          fi
+          echo "Stopping cluster $CLUSTER (this takes ~1 min)..."
+          az kusto cluster stop -g "$RG" -n "$CLUSTER"
+          echo "Final cluster state:"
+          az kusto cluster show -g "$RG" -n "$CLUSTER" \
+            --query "{name:name, state:state}" -o table
 
       - name: Emit DEMO_URL on deploy / provision
         if: inputs.action == 'deploy' || inputs.action == 'provision'

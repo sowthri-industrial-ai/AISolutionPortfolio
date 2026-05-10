@@ -1,0 +1,30 @@
+# Refinery Digital Twin — pre-commit config.
+#
+# Lane discipline: every hook is scoped to this project's subtree so quality
+# gates never touch files outside 2.AssetsAI/1.RefineryDigitalTwin/. Mirrors
+# HelloAgenticAI's project-local pattern.
+#
+# Phase 1 foundation work is doc + infra only. Python lane (probe.py,
+# streamer.py under 2.automation/) is stable; ruff/mypy will be added back
+# when future phases reopen Python work.
+files: ^2\.AssetsAI/1\.RefineryDigitalTwin/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

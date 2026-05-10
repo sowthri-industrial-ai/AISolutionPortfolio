@@ -1,0 +1,107 @@
+# Refinery Digital Twin — provision / deploy / teardown via OIDC + azd.
+#
+# Triggered by workflow_dispatch (manual run from GitHub UI, or via a tiny
+# Azure Function fronting the portfolio-site Launch / Teardown buttons in
+# Feature 5). Single repo-wide Entra app registration (federated credentials
+# scoped to GitHub Environment `portfolio-demo`) authenticates via OIDC —
+# zero secrets in GitHub, only repo variables for the SP IDs.
+#
+# Setup contract (operator one-time): mirror the steps in
+# 1.AgenticAI/1.HelloAgenticAI/docs/setup-oidc.md but for this project's
+# RG (rg-refinerydigitaltwin-${env}). Repo variables AZURE_CLIENT_ID /
+# AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID are shared across projects in
+# the portfolio; the Environment scope + Bicep RG separate concerns.
+#
+# Status: CANDIDATE CANONICAL pattern — written ahead of HelloAgenticAI
+# Phase 5's own deploy.yml. When HelloAgenticAI Phase 5 lands its
+# workflow, the portfolio coordinator should converge both files (this
+# one or HelloAgenticAI's wins as canonical, the other mirrors).
+
+name: Refinery Digital Twin — deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - provision
+          - deploy
+          - teardown
+      environment:
+        description: "Environment name (azd env)"
+        required: false
+        default: dev
+
+permissions:
+  id-token: write   # required for OIDC token issuance to Azure
+  contents: read
+
+jobs:
+  run:
+    name: ${{ inputs.action }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    # GitHub Environment scope — matches the federated credential subject
+    # `repo:sowthri-industrial-ai/AISolutionPortfolio:environment:portfolio-demo`
+    environment: portfolio-demo
+    defaults:
+      run:
+        working-directory: 2.AssetsAI/1.RefineryDigitalTwin/infra
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ENV_NAME: ${{ inputs.environment }}
+      AZURE_LOCATION: swedencentral
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Azure Developer CLI
+        uses: Azure/setup-azd@v2
+
+      - name: azd auth login (federated)
+        run: |
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider github \
+            --tenant-id "$AZURE_TENANT_ID"
+
+      - name: Provision (infra only)
+        if: inputs.action == 'provision'
+        run: |
+          azd provision \
+            --environment "${{ inputs.environment }}" \
+            --no-prompt
+
+      - name: Deploy (infra + content)
+        if: inputs.action == 'deploy'
+        run: |
+          azd up \
+            --environment "${{ inputs.environment }}" \
+            --no-prompt
+
+      - name: Teardown (purge RG)
+        if: inputs.action == 'teardown'
+        run: |
+          azd down \
+            --environment "${{ inputs.environment }}" \
+            --purge \
+            --force
+
+      - name: Emit DEMO_URL on deploy / provision
+        if: inputs.action != 'teardown'
+        run: |
+          azd env get-values --environment "${{ inputs.environment }}" \
+            | grep -E '^DEMO_URL=' \
+            || echo "DEMO_URL not yet available"

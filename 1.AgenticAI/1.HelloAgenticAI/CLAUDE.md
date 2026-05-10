@@ -99,6 +99,59 @@ cd infra && azd deploy                      # deploy code only
 cd infra && azd down --purge                # full teardown
 ```
 
+## First-time / post-teardown developer setup
+
+Phase 1's Bicep grants Cosmos / AOAI / Content Safety / Storage / Key Vault data-plane roles to the **runtime user-assigned managed identity** — what the deployed Container App uses. **Local development uses a different principal** (your `az login` user, picked up by `DefaultAzureCredential`), so integration tests against a freshly-provisioned environment will 401/403 until the same roles are mirrored to your dev principal.
+
+Phase 5 (`docs/decisions/TODO-phase-5-data-plane-rbac.md`) makes this declarative in Bicep. Until then, run the grants below after every `azd up` (they get wiped by `azd down --purge`):
+
+```bash
+# 1. Discover your principal id (or pin to the value Phase 1 already recorded)
+DEV_PRINCIPAL=$(az ad signed-in-user show --query id -o tsv)
+RG=rg-helloagenticai-dev
+SUB=$(az account show --query id -o tsv)
+
+# 2. Cosmos DB Built-in Data Contributor (Cosmos uses its own RBAC system)
+az cosmosdb sql role assignment create \
+  --account-name cosmos-helloai-dev-zld3sf6mfagdq \
+  --resource-group "$RG" \
+  --scope "/" \
+  --principal-id "$DEV_PRINCIPAL" \
+  --role-definition-id "00000000-0000-0000-0000-000000000002"
+
+# 3. Cognitive Services OpenAI User on AOAI
+az role assignment create \
+  --assignee-object-id "$DEV_PRINCIPAL" \
+  --assignee-principal-type User \
+  --role "Cognitive Services OpenAI User" \
+  --scope "/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/aoai-helloai-dev-zld3sf6mfagdq"
+
+# 4. Cognitive Services User on Content Safety (Phase 4+ when guardrails wire live)
+# az role assignment create \
+#   --assignee-object-id "$DEV_PRINCIPAL" --assignee-principal-type User \
+#   --role "Cognitive Services User" \
+#   --scope "/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/cs-helloai-dev-zld3sf6mfagdq"
+
+# 5. Storage Blob Data Contributor on Storage (when test exercises blob)
+# az role assignment create \
+#   --assignee-object-id "$DEV_PRINCIPAL" --assignee-principal-type User \
+#   --role "Storage Blob Data Contributor" \
+#   --scope "/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Storage/storageAccounts/sthelloaidevzld3sf6mfagd"
+
+# 6. Key Vault Secrets User on KV (Phase 4+ when Langfuse keys land)
+# az role assignment create \
+#   --assignee-object-id "$DEV_PRINCIPAL" --assignee-principal-type User \
+#   --role "Key Vault Secrets User" \
+#   --scope "/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/kv-zld3sf6mfagdq"
+```
+
+**Propagation timing — important:**
+
+- Cosmos and Storage data-plane grants propagate in **<2 min** in our experience.
+- AOAI and Content Safety propagate in **15–30 min** typically (Microsoft documents up to 30 min for Cognitive Services accounts), but in Phase 2's first integration run we observed AOAI taking **>45 min** to propagate. Don't run integration tests immediately after a fresh AOAI grant — wait at least 30 min, or use a wait-and-retry loop (see ADR-0003 risk #7).
+
+If a test 401/403s and the role IS assigned (verify with `az role assignment list --assignee $DEV_PRINCIPAL --all`), you're in the propagation window — give it more time.
+
 ## When something goes wrong
 
 - Build fails after a dependency upgrade → revert pyproject.toml, ask.

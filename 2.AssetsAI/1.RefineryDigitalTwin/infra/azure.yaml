@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: refinerydigitaltwin
+metadata:
+  template: refinerydigitaltwin-phase1@0.1.0
+
+infra:
+  provider: bicep
+  path: .
+  module: main
+
+services:
+  web:
+    # Path is relative to this azure.yaml's directory (infra/). The placeholder
+    # is plain HTML + Tailwind CDN — no build step. Deployed via `swa deploy`
+    # under azd's staticwebapp host.
+    project: placeholder
+    language: html
+    host: staticwebapp

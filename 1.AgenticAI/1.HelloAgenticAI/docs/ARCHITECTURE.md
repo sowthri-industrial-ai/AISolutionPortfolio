@@ -181,7 +181,7 @@ Every tool is implemented as an **MCP server**. In v1, mock fruit-shop servers r
 ### 11. Observability
 - **Application Insights** captures every agent event with correlation IDs across nodes. Used for the production-style angle.
 - **Log Analytics** aggregates traces and exposes Kusto queries for analysis.
-- **Langfuse Cloud (free tier)** gives a polished trace UI for the live demo. SDK calls only; the two API keys live in Key Vault. See [ADR-0001](0001-langfuse-cloud-vs-selfhosted.md) for the rationale (vs. self-hosted) and the upgrade path. Self-hosted Langfuse remains the documented option for refinery verticals with compliance constraints that disallow SaaS observability.
+- **Langfuse Cloud (free tier)** gives a polished trace UI for the live demo. SDK calls only; the two API keys live in Key Vault. See [ADR-0001](decisions/0001-langfuse-cloud-vs-selfhosted.md) for the rationale (vs. self-hosted) and the upgrade path. Self-hosted Langfuse remains the documented option for refinery verticals with compliance constraints that disallow SaaS observability.
 
 ### 12. CI/CD
 - **GitHub Actions with OIDC** federated credentials → Azure (zero secrets stored in GitHub).
@@ -229,8 +229,9 @@ This is intentional — v1 demonstrates the full architecture cleanly without bl
 
 ## Architecture Decision Records
 
-Significant decisions are captured as ADRs in this `docs/` folder, numbered chronologically:
+Significant decisions are captured as ADRs under [`docs/decisions/`](decisions/), numbered chronologically:
 
-- [ADR-0000](0000-template.md) — template
-- [ADR-0001](0001-langfuse-cloud-vs-selfhosted.md) — Langfuse Cloud (free tier) for v1, not self-hosted
-- [ADR-0002](0002-portfolio-site-stack-astro.md) — Portfolio site stack: Astro + Tailwind on Azure Static Web Apps
+- [ADR-0000](decisions/0000-template.md) — template
+- [ADR-0001](decisions/0001-langfuse-cloud-vs-selfhosted.md) — Langfuse Cloud (free tier) for v1, not self-hosted
+- [ADR-0002](decisions/0002-portfolio-site-stack-astro.md) — Portfolio site stack: Astro + Tailwind on Azure Static Web Apps
+- [ADR-0003](decisions/0003-azd-up-preflight-risks.md) — `azd up` preflight risks for HelloAgenticAI v1

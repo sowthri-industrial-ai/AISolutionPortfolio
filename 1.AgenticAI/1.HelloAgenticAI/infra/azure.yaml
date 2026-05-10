@@ -14,5 +14,7 @@ services:
     language: python
     host: containerapp
     docker:
-      path: ../Dockerfile
-      context: ..
+      # `path` and `context` are relative to `project:` (which is the project
+      # root, ../ from this file). Default `context` is `project`, so we omit
+      # it; `path: Dockerfile` then resolves to <project-root>/Dockerfile.
+      path: Dockerfile

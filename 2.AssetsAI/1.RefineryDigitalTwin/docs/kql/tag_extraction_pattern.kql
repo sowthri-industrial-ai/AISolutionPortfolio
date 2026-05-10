@@ -1,0 +1,42 @@
+// Reference pattern — extract any tag from the snapshot `tags` dynamic.
+//
+// Stage 5 producer sends each snapshot as one Event Hub message body with
+// the Stage 2 schema:
+//   {
+//     "timestamp": "2026-05-10T12:36:17.153Z",
+//     "cycle": 4,
+//     "solved": true,
+//     "solve_time_s": 1.84,
+//     "cycle_duration_s": 2.004,
+//     "tag_count": 1550,
+//     "errors": [],
+//     "tags": { "<tag_id>": <numeric|bool|null|string>, ... }
+//   }
+//
+// Tag IDs follow the Phase 0a convention:
+//   <ObjType>-<NORMALIZED_OWNER_TAG>[.<PHASE>].<PROPERTY_KEY>[.<modifier>]
+//
+// Examples (from phase0a_tag_dictionary.json):
+//   MS-OIL.OVERALL.PROP_MS_0                  Oil OVERALL phase, Temperature (K)
+//   MS-OIL.OVERALL.PROP_MS_2                  Oil OVERALL phase, Mass Flow (kg/s)
+//   MS-OIL.VAPOR.PROP_MS_2                    Oil VAPOR phase, Mass Flow (kg/s)
+//   MS-OIL.OVERALL.MoleFraction.PSE_3165_27   Oil OVERALL mole fraction PSE_3165_27
+//   COL-DISTILLATION_COLUMN.RefluxRatio       Column reflux ratio
+//   COL-DISTILLATION_COLUMN.STAGE_5.T_K       Column stage 5 temperature
+//   COL-DISTILLATION_COLUMN.STAGE_5.LiqMoleFraction.PSE_3165_27
+//   ES-CONDENSER_DUTY.EnergyFlow              Energy stream condenser duty
+//   HC-THERMAL_OIL_HEATING.OutletTemperature  Heater outlet T
+//   PMP-THERMAL_OIL_PUMP.Power                Pump power
+//   MS-THERMINOL_VP1.PROP_MS_2                Therminol mass flow (200 kg/s)
+//
+// `tags` is a `dynamic` column. Access with bracket syntax and cast to the
+// expected type:  todouble() | tobool() | tostring() | tolong().
+
+let target_tag = "ES-CONDENSER_DUTY.EnergyFlow";   // ← change this
+snapshots
+| where solved == true
+| project ts = todatetime(timestamp),
+          tag_value = todouble(tags[target_tag])
+| where isnotnull(tag_value)
+| order by ts asc
+| take 100

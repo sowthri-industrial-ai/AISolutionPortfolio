@@ -1,0 +1,13 @@
+// Condenser duty (kW) over time, on solved cycles only.
+//
+// Tag: ES-CONDENSER_DUTY.EnergyFlow.
+// Phase 0a ground truth: ~29.76 MW (29755.28 kW), exact match verified
+// by Stage 1 / Stage 2 smoke tests.
+
+snapshots
+| where solved == true
+| project ts = todatetime(timestamp),
+          condenser_duty_kw = todouble(tags['ES-CONDENSER_DUTY.EnergyFlow'])
+| where isnotnull(condenser_duty_kw)
+| order by ts asc
+| render timechart

@@ -1,0 +1,35 @@
+// Solve health — pipeline + simulator vital signs.
+//
+// What this watches:
+//   - solve_rate_pct        Should be ~100%. Drops indicate convergence problems.
+//   - avg_solve_s           Phase 0a baseline 3.04s. Stage 2 smoke avg 2.0-2.5s.
+//                           Drift > 8s flags an investigation.
+//   - p95_solve_s           Tail latency. Shouldn't blow past avg.
+//   - drift_below_1550      Cycles where solved=true but tag_count < 1550.
+//                           Should be 0; >0 means partial extraction failure.
+//   - cycles_with_errors    Cycles whose `errors` array isn't empty (degraded
+//                           green: solve OK but some per-tag failures).
+//   - window_s              Time span covered. Useful for sanity-checking
+//                           ingestion rate (cycles / window_s should be ~1/30).
+
+snapshots
+| extend ts = todatetime(timestamp)
+| summarize
+    total_cycles       = count(),
+    solved_cycles      = countif(solved == true),
+    failed_cycles      = countif(solved != true),
+    avg_solve_s        = avg(todouble(solve_time_s)),
+    p95_solve_s        = percentile(todouble(solve_time_s), 95),
+    avg_cycle_s        = avg(todouble(cycle_duration_s)),
+    drift_below_1550   = countif(tag_count != 1550 and solved == true),
+    cycles_with_errors = countif(array_length(errors) > 0),
+    earliest           = min(ts),
+    latest             = max(ts)
+| extend
+    solve_rate_pct = round(100.0 * solved_cycles / total_cycles, 2),
+    window_s       = datetime_diff('second', latest, earliest)
+| project
+    total_cycles, solved_cycles, failed_cycles, solve_rate_pct,
+    avg_solve_s, p95_solve_s, avg_cycle_s,
+    drift_below_1550, cycles_with_errors,
+    earliest, latest, window_s

@@ -1,0 +1,21 @@
+// Reboiler duty (kW) over time, on solved cycles only.
+//
+// Source: `snapshots` table in `twin_db` (Eventhouse). Ingested from the
+// `dwsim-snapshots` Event Hub via the `dwsim_stream` Eventstream. Each row
+// is one solve cycle's snapshot from the Stage 2 streamer.
+//
+// Tag: ES-REBOILER_DUTY.EnergyFlow.
+// Phase 0a ground truth: ~-27.28 MW (Reboiler Duty energy stream is the
+// column's reboiler duty after the architect override moved it from
+// thermal_oil to petroleum subsystem).
+//
+// `tags` is a `dynamic` column — access via bracket syntax and cast.
+// `timestamp` is an ISO-8601 string in source; cast defensively.
+
+snapshots
+| where solved == true
+| project ts = todatetime(timestamp),
+          reboiler_duty_kw = todouble(tags['ES-REBOILER_DUTY.EnergyFlow'])
+| where isnotnull(reboiler_duty_kw)
+| order by ts asc
+| render timechart

@@ -21,7 +21,7 @@ param tags object = {}
 resource swa 'Microsoft.Web/staticSites@2024-04-01' = {
   name: name
   location: location
-  tags: tags
+  tags: union(tags, { 'azd-service-name': 'web' })
   sku: {
     name: 'Free'
     tier: 'Free'

@@ -14,5 +14,6 @@ services:
     # is plain HTML + Tailwind CDN — no build step. Deployed via `swa deploy`
     # under azd's staticwebapp host.
     project: placeholder
-    language: html
+    language: js
     host: staticwebapp
+    dist: . 

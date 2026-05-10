@@ -16,4 +16,4 @@ services:
     project: placeholder
     language: js
     host: staticwebapp
-    dist: . 
+    dist: .

@@ -7,17 +7,37 @@ requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 authors = [{ name = "Sowthri Somasundaram" }]
 
-# Phase 1 dependencies only — placeholder app + framework Python package skeleton.
-# Phase 2+ dependencies (langgraph, openai, azure-identity, azure-cosmos, langfuse, etc.)
-# are added at Phase 2 kickoff with explicit user approval per CLAUDE.md workflow rule 4.
+# Phase 1: placeholder app + framework Python package skeleton.
+# Phase 2: framework runtime — agent orchestration, LLM, memory, guardrails,
+#         observability, evals — approved at Phase 2 kickoff (CLAUDE.md rule 4).
+# Phase 3+ deps will arrive at their respective kickoffs.
 dependencies = [
+    # Phase 1
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32,<1.0",
+    # Phase 2 — agent runtime
+    "langgraph>=0.2,<1.0",
+    "langchain-core>=0.3,<1.0",
+    "openai>=1.50,<3.0",
+    # Phase 2 — Azure SDKs (AAD-only access via DefaultAzureCredential)
+    "azure-identity>=1.19,<2.0",
+    # azure-cosmos doesn't expose an [aio] extras (verified on 4.15.0:
+    # `Provides-Extra: None`), unlike sibling Azure SDKs. Per CLAUDE.md
+    # "Conventions" we'd normally use the extras form; aiohttp is declared
+    # explicitly as the deliberate exception until upstream ships extras.
+    # Tracking: https://github.com/Azure/azure-sdk-for-python/issues/46810
+    "azure-cosmos>=4.7,<5.0",
+    "aiohttp>=3.10,<4.0",
+    "azure-keyvault-secrets>=4.9,<5.0",
+    "azure-monitor-opentelemetry>=1.6,<2.0",
+    # Phase 2 — schemas
+    "pydantic>=2.10,<3.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<2.0",
     "ruff>=0.7,<1.0",
     "mypy>=1.13,<2.0",
     "pre-commit>=4.0,<5.0",
@@ -73,6 +93,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["framework", "tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"  # decorators-free async tests; pytest-asyncio
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 markers = [
     "integration: tests that require deployed Azure resources (deselect with '-m \"not integration\"')",

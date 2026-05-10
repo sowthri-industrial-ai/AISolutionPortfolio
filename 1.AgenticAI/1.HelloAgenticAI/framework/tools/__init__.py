@@ -1,1 +1,15 @@
-"""Tools layer — MCPToolBase, ToolRegistry. Implemented in Phase 2."""
+"""Tools layer — MCPToolBase + ToolRegistry."""
+
+from framework.tools.base import (
+    MCPToolBase,
+    ToolAlreadyRegisteredError,
+    ToolNotFoundError,
+    ToolRegistry,
+)
+
+__all__ = [
+    "MCPToolBase",
+    "ToolAlreadyRegisteredError",
+    "ToolNotFoundError",
+    "ToolRegistry",
+]

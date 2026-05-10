@@ -1,1 +1,17 @@
-"""Agent runtime — AgentBase, AgentState, graph nodes. Implemented in Phase 2."""
+"""Agent runtime — AgentBase + AgentState + decision contracts."""
+
+from framework.agents.base import (
+    AgentBase,
+    AgentState,
+    HistoryEntry,
+    ReflectionDecision,
+    ToolDecision,
+)
+
+__all__ = [
+    "AgentBase",
+    "AgentState",
+    "HistoryEntry",
+    "ReflectionDecision",
+    "ToolDecision",
+]

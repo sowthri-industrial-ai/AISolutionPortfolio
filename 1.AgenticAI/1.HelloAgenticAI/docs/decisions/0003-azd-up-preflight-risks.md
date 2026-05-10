@@ -148,6 +148,33 @@ az cognitiveservices model list -l swedencentral \
 
 **Remediation:** fix the offending Bicep. Re-run `azd up` — Bicep is idempotent, the existing resources are no-op'd and only the failing/missing modules deploy.
 
+### 7. DefaultAzureCredential local-dev vs Container App managed identity
+
+**Symptom:** integration tests run from a developer's machine (post-`azd up`) get `401`/`403` PermissionDenied from Cosmos / AOAI / Content Safety / Storage / Key Vault even though the Container App in Azure works fine against the same resources.
+
+**Cause:** Phase 1 Bicep grants every data-plane role to the **runtime user-assigned managed identity** (`id-helloagenticai-dev-…`). That identity is what the deployed Container App uses. **Local development uses a different principal** — your `az login` user, picked up by `DefaultAzureCredential` via the AzureCLI credential type. The MI's grants don't transfer; the dev principal needs analogous grants.
+
+This is a structural truth about Azure managed-identity auth, not a v1 bug. Production-style code uses MI; local-dev code uses your user; the two principals need separate grants.
+
+**Empirical note (2026-05-10, HelloAgenticAI Phase 2 first integration test):**
+
+| Service | Grant time → request 200 (dev principal) |
+|---|---|
+| Cosmos DB | <2 min |
+| Storage | <2 min (anticipated; not directly measured) |
+| Azure OpenAI | **>45 min observed** (Microsoft documents up to 30 min for Cognitive Services; this run exceeded that) |
+| Content Safety | likely similar to AOAI (Cognitive Services family) |
+| Key Vault | <5 min (typical) |
+
+Plan AOAI grants accordingly: don't run integration tests immediately after a fresh AOAI grant; wait 30+ min, or use a wait-and-retry loop that re-attempts the test every 5 min for up to 60 min.
+
+**Remediation:**
+
+1. Mirror the Phase 1 MI grants to your dev principal. The exact `az` commands are in `CLAUDE.md` §"First-time / post-teardown developer setup" — Cosmos, AOAI, plus the Content Safety / Storage / Key Vault grants needed by Phase 4+.
+2. If a grant is in place but the request still 401s after 60 min, then it's not propagation — investigate the role assignment scope, the resource's `disableLocalAuth` setting, and the credential's tenant binding.
+
+**Permanent fix (Phase 5):** `docs/decisions/TODO-phase-5-data-plane-rbac.md` specs a Bicep refactor that adds optional `developerPrincipalId` and `oidcServicePrincipalId` parameters to each per-service module, conditionally creating the analogous role assignments at provision time. After Phase 5 lands, `azd up` is idempotent for both production-style and dev-style auth — no manual `az` commands.
+
 ### 4. Container App initial-image port mismatch (expected, transient)
 
 **Symptom:** In the 1–3 min window between `azd provision` finishing and `azd deploy` starting, the Container App's `latestRevision` shows "Activation failure" or failing health probes.
@@ -169,7 +196,7 @@ Most likely causes: image build pulled `framework/` incorrectly (PYTHONPATH issu
 
 ## Decision
 
-These six risks are captured as this preflight runbook rather than mitigated in code. Specifically:
+These seven risks are captured as this preflight runbook rather than mitigated in code. Specifically:
 
 - **No capacity fallback** in `infra/modules/openai.bicep` — silent downgrades violate the user's "never silently downgrade" rule.
 - **No runtime region selection** — region is a deliberate architectural choice per `docs/ARCHITECTURE.md` and project memory.
@@ -177,6 +204,7 @@ These six risks are captured as this preflight runbook rather than mitigated in 
 - **No swap of the placeholder image** — the brief ingress-mismatch window is a non-issue, not worth the complexity of a custom Phase-1-only image.
 - **No auto-restart of Docker Desktop** — the agent can `open -a Docker` but only when explicitly working a known-Docker-down state; not as background polling.
 - **Bicep dry-run preflight (`azd provision --preview`) is MANDATORY before any `azd up`** — added to `CLAUDE.md` "Useful commands". 30 s of validation beats 8 min of partial-failure cleanup.
+- **Dev-principal data-plane grants are NOT in v1 Bicep** — Phase 1's modules grant data-plane roles only to the runtime managed identity. Local-dev grants are documented as a runbook in `CLAUDE.md` "First-time / post-teardown developer setup" (and recapped in risk #7) until the Phase 5 Bicep refactor (`docs/decisions/TODO-phase-5-data-plane-rbac.md`) makes them declarative + parameterized. v1 keeps the Bicep production-only and clean.
 
 ## Consequences
 

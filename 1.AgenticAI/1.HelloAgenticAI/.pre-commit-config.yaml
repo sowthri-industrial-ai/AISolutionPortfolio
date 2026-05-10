@@ -1,6 +1,11 @@
 default_language_version:
   python: python3.12
 
+# Lane discipline: scope every hook to this project's subtree so quality gates
+# never touch files outside 1.AgenticAI/1.HelloAgenticAI/. Sowthri does parallel
+# work in other folders; this config must not interfere.
+files: ^1\.AgenticAI/1\.HelloAgenticAI/
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -28,7 +33,8 @@ repos:
     hooks:
       - id: mypy
         args: [--strict]
-        files: ^framework/
+        # Repo-root-relative path (top-level files: filter is ANDed with this)
+        files: ^1\.AgenticAI/1\.HelloAgenticAI/framework/
         additional_dependencies: []
 
   - repo: https://github.com/gitleaks/gitleaks

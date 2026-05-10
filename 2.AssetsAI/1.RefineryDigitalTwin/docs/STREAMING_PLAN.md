@@ -70,12 +70,12 @@ def introspect_class(cls):
         if method.IsPublic:
             params = [(p.Name, p.ParameterType.Name) for p in method.GetParameters()]
             print(f"  {method.Name}({params}) -> {method.ReturnType.Name}")
-    
+
     print("\nPUBLIC PROPERTIES:")
     for prop in cls.GetType().GetProperties():
         print(f"  {prop.Name}: {prop.PropertyType.Name} "
               f"(R={prop.CanRead}, W={prop.CanWrite})")
-    
+
     print("\nPUBLIC FIELDS:")
     for field in cls.GetType().GetFields():
         if field.IsPublic:
@@ -87,7 +87,7 @@ def inspect_live_object(obj, name="object"):
     print(f"\n=== Live {name} ===")
     print(f"Type: {type(obj).__name__}")
     print(f"Repr: {repr(obj)[:200]}")
-    
+
     # Try common DWSIM property accessors
     if hasattr(obj, 'GetType'):
         for method_name in ['GetPropertyValue', 'GetProperties', 'ToString']:
@@ -114,10 +114,10 @@ if __name__ == "__main__":
     # Bootstrap
     sim_auto = Automation3()
     sim = sim_auto.LoadFlowsheet(TARGET_FILE)
-    
+
     # Run introspections
     # ...
-    
+
     # Always exit cleanly
     print("\n=== PROBE COMPLETE ===")
     sys.exit(0)
@@ -151,23 +151,23 @@ A good probe report contains:
 ```
 1. WHAT WAS PROBED
    Class names, method names, instance objects examined
-   
+
 2. WHAT WAS FOUND
    Public methods and signatures
    Public properties (R/W flags)
    Live property values from real instance
    Exception types raised by failed calls
-   
+
 3. WHAT IS BLOCKED
    Private fields (no public setter)
    Methods that throw on common inputs
    Missing API surface
-   
+
 4. PROPOSED PATHS FORWARD
    Option A: clean public API (if exists)
    Option B: reflection workaround (if needed)
    Option C: source-read DWSIM to confirm internal pattern
-   
+
 5. ARCHITECT DECISION POINT
    "I cannot proceed without your call on A vs B vs C"
 ```
@@ -199,7 +199,7 @@ PROPOSED PATHS FORWARD:
 
 ARCHITECT DECISION POINT:
   Cannot proceed without choosing A, B, or C.
-  
+
 RESULT: We chose to abandon CDU build, use bundled sample instead.
 The probe saved us from 4-8 hours of fighting reflection-write code.
 ```
@@ -210,27 +210,27 @@ The probe saved us from 4-8 hours of fighting reflection-write code.
 1. CLASS DISCOVERY PROBE
    "What classes exist in DWSIM.X.Y namespace?"
    Use: GetTypes(), filter by namespace
-   
-2. METHOD SIGNATURE PROBE  
+
+2. METHOD SIGNATURE PROBE
    "What methods does class X have, with what parameters?"
    Use: GetType().GetMethods()
-   
+
 3. PROPERTY ACCESSIBILITY PROBE
    "Is this property read-only or writable?"
    Use: PropertyInfo.CanWrite
-   
+
 4. ENUM/CONSTANT PROBE
    "What are the valid values for an enum parameter?"
    Use: Enum.GetValues(), GetNames()
-   
+
 5. LIVE STATE PROBE
    "What's the current state of a running simulation?"
    Use: sim.SimulationObjects, walk the dict
-   
+
 6. EXCEPTION PROBE
    "What exception class does method X throw on failure?"
    Use: try/except with type(e).__name__
-   
+
 7. SERIALIZATION PROBE
    "Does this property survive a save+load cycle?"
    Use: write, save, drop sim, load, re-read, compare
@@ -244,11 +244,11 @@ Encountered new DWSIM API need
        Have I done this before?
        ├─ YES → use known pattern
        └─ NO ↓
-       
+
        Is there a single obvious method?
        ├─ YES → try it once, if it fails goto PROBE
        └─ NO ↓
-       
+
        PROBE:
          Write probe script
          Run it
@@ -274,7 +274,7 @@ DECISION LOCKED:
   Path: /Applications/DWSIM.app/Contents/MonoBundle/samples/
         (or wherever it's installed — verify path)
   Modification: NONE — use as-is
-  
+
 WHY THIS FILE OVER THE OTHER:
   - "with Reboiler Heating Fluid" version has MORE unit ops to stream
   - More tags = richer digital twin demo
@@ -374,40 +374,40 @@ class StreamerLoop:
         self.sink = sink
         self.cycle_interval = cycle_interval
         self.cycle_count = 0
-        
+
         # Load simulation once
         self.sim_auto = Automation3()
         self.sim = self.sim_auto.LoadFlowsheet(sim_path)
         self.sim.AddListener(Action[object, object](self._listener))
-        
+
         # First solve to validate
         self._solve_once()
         if not self.sim.Solved:
             raise RuntimeError(f"Initial solve failed: {self.sim.ErrorMessage}")
-    
+
     def run(self):
         """Main loop — solve, extract, emit, sleep, repeat."""
         while True:
             try:
                 cycle_start = time.time()
-                
+
                 # Solve
                 self._solve_once()
-                
+
                 # Extract
                 snapshot = self._extract_snapshot()
                 snapshot["cycle"] = self.cycle_count
                 snapshot["cycle_duration_s"] = time.time() - cycle_start
-                
+
                 # Emit
                 self.sink.write(snapshot)
-                
+
                 # Sleep
                 self.cycle_count += 1
                 elapsed = time.time() - cycle_start
                 sleep_time = max(0, self.cycle_interval - elapsed)
                 time.sleep(sleep_time)
-                
+
             except KeyboardInterrupt:
                 print("Streamer stopped by user.")
                 break
@@ -415,10 +415,10 @@ class StreamerLoop:
                 # Don't crash — log and continue
                 print(f"Cycle {self.cycle_count} failed: {e}")
                 time.sleep(self.cycle_interval)
-    
+
     def _solve_once(self):
         self.sim_auto.CalculateFlowsheet4(self.sim)
-    
+
     def _extract_snapshot(self):
         # Walk all unit ops and emit tags
         # ... (~620 tag extraction)
@@ -429,7 +429,7 @@ class StreamerLoop:
             "column": {...},
             "energy": {...},
         }
-    
+
     def _listener(self, msg, level):
         print(f"DWSIM[{level}]: {msg}")
 ```
@@ -444,7 +444,7 @@ class StreamerLoop:
     "solve_time_s": 3.84,
     "cycle_duration_s": 4.12,
     "errors": [],
-    
+
     "streams": {
         "Oil": {
             "T_K": 350.0,
@@ -467,7 +467,7 @@ class StreamerLoop:
         "Intermediate Product": { ... },
         "Heavy Product": { ... }
     },
-    
+
     "columns": {
         "Distillation Column": {
             "tag": "C-101",
@@ -483,7 +483,7 @@ class StreamerLoop:
             ]
         }
     },
-    
+
     "energy_streams": {
         "Condenser Duty": 29756.5,
         "Reboiler Duty": -27282.4,
@@ -516,27 +516,27 @@ STAGE 1: Local JSON file sink              ← MVP
   Output: snapshots/snap_<cycle>.json
   Purpose: Prove the loop works
   Effort: 4-6 hours
-  
+
 STAGE 2: Append to local JSONL stream
   Output: snapshots.jsonl (one line per cycle)
   Purpose: Bounded file, time-ordered
   Effort: +2 hours
-  
+
 STAGE 3: REST API endpoint (FastAPI)
   Output: GET /snapshot, GET /history?from=&to=
   Purpose: Frontend dashboards can pull
   Effort: +6-8 hours
-  
+
 STAGE 4: OPC-UA server (asyncua)
   Output: Standard OPC-UA tag tree on tcp://localhost:4840
   Purpose: Industrial protocol credibility
   Effort: +10-15 hours
-  
+
 STAGE 5: Azure Event Hubs producer
   Output: Streams to cloud
   Purpose: Triggers Feature 1 → Fabric pipeline
   Effort: +8-12 hours
-  
+
 STAGE 6: Bidirectional (setpoints in)
   Input: Operator setpoints from REST/OPC-UA/Event Hubs control queue
   Output: Applied before next solve
@@ -572,7 +572,7 @@ Decision 5: How are setpoints applied?
   Apply, solve, snapshot.
 
 Decision 6: Crash recovery?
-  Recommendation: Loop wraps in try/except, on any failure save current 
+  Recommendation: Loop wraps in try/except, on any failure save current
   state and exit cleanly. Systemd or launchd respawns. State is rebuildable.
 ```
 
@@ -612,7 +612,7 @@ sits on top of this single proven loop.
 Day 11 priorities (in order):
 
 1. INSPECT the chosen file (Phase 0a probe — 15 min)
-   - Confirm "Petroleum Distillation with Reboiler Heating Fluid.dwxmz" 
+   - Confirm "Petroleum Distillation with Reboiler Heating Fluid.dwxmz"
      is at expected path
    - Run inspection probe
    - Document: total tags, unit ops, solve time
@@ -646,7 +646,7 @@ Estimated total to Stage 3: 15-20 hours
 
 ```
 1. The file is locked. Do NOT modify it. Do NOT try to "improve" it.
-   "Petroleum Distillation with Reboiler Heating Fluid.dwxmz" 
+   "Petroleum Distillation with Reboiler Heating Fluid.dwxmz"
    is the simulation. It works. Stream it.
 
 2. Probe before assuming. Spend 15 min on a probe to save 3 hours.
@@ -658,13 +658,13 @@ Estimated total to Stage 3: 15-20 hours
 5. Local JSON first, cloud later. Get the loop bulletproof on disk before
    pushing to Azure.
 
-6. Verify-after-write applies to setpoints too. After applying any 
+6. Verify-after-write applies to setpoints too. After applying any
    setpoint, re-read the property to confirm it stuck.
 
 7. The 8 bug classes from LEARNINGS.md still apply. Especially #4 (zombie
    composition) — verify compounds in every snapshot.
 
-8. Read DWSIM_KNOWLEDGE_BASE.md (the document I just gave you) before 
+8. Read DWSIM_KNOWLEDGE_BASE.md (the document I just gave you) before
    touching code. Everything in it was learned the hard way.
 ```
 

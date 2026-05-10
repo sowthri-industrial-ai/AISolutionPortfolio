@@ -262,9 +262,9 @@ Backups (auto-saved by DWSIM every 3 min while open):
 
 ```
 Sowthri — chemical engineer, Dammam Saudi Arabia.
-Has been building this for 10 days. 
+Has been building this for 10 days.
 Hit a wall with custom CDU. Pivoting to digital twin platform demo.
-Operating model: architect (Claude) writes briefings, 
+Operating model: architect (Claude) writes briefings,
                  implementer (Claude Code) executes,
                  operator (Sowthri) approves and runs.
 
@@ -313,12 +313,12 @@ while True:
     # Apply setpoints
     setpoints = get_current_setpoints()
     apply_setpoints(sim, setpoints)
-    
+
     # Solve
     t_start = time.time()
     sim_auto.CalculateFlowsheet4(sim)
     t_solve = time.time() - t_start
-    
+
     # Extract snapshot
     snapshot = {
         "timestamp": datetime.utcnow().isoformat(),
@@ -328,10 +328,10 @@ while True:
         "column": extract_column_state(sim),
         "energy": extract_energy_streams(sim),
     }
-    
+
     # Emit to Azure / local store / OPC-UA
     emit_snapshot(snapshot)
-    
+
     # Sleep to next cycle
     time.sleep(SOLVE_INTERVAL)
 ```

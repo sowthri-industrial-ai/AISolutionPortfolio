@@ -1,0 +1,84 @@
+[2026-05-09T20:09:44.681+00:00] [INFO] ======================================================================
+[2026-05-09T20:09:44.681+00:00] [INFO] Phase 0a probe started
+[2026-05-09T20:09:44.681+00:00] [INFO] Substrate: /Applications/DWSIM.app/Contents/MonoBundle/samples/Petroleum Distillation with Reboiler Heating Fluid.dwxmz
+[2026-05-09T20:09:44.681+00:00] [INFO] Output dir: /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a
+[2026-05-09T20:09:44.686+00:00] [INFO] Pre-solve baseline saved: /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_substrate_pre_solve.dwxmz
+[2026-05-09T20:09:46.168+00:00] [INFO] Loaded DLL: /Applications/DWSIM.app/Contents/MonoBundle/DWSIM.Automation.dll
+[2026-05-09T20:09:46.174+00:00] [INFO] Loaded DLL: /Applications/DWSIM.app/Contents/MonoBundle/DWSIM.Interfaces.dll
+[2026-05-09T20:09:46.198+00:00] [INFO] Loaded DLL: /Applications/DWSIM.app/Contents/MonoBundle/DWSIM.Thermodynamics.dll
+[2026-05-09T20:09:48.801+00:00] [INFO] Automation3 instance created
+[2026-05-09T20:09:48.801+00:00] [INFO] Loading flowsheet...
+[2026-05-09T20:09:53.766+00:00] [INFO] Flowsheet loaded
+[2026-05-09T20:09:53.767+00:00] [WARN] DWSIM listener API not exposed in this version — KB §3 drift; Python-side log unaffected.
+[2026-05-09T20:09:53.769+00:00] [INFO] Pre-solved on load: False
+[2026-05-09T20:09:53.784+00:00] [INFO] Compound count: 30 (first 3: ['PSE_3165_2', 'PSE_3165_3', 'PSE_3165_4'], last 3: ['PSE_3165_29', 'PSE_3165_30', 'PSE_3165_31'])
+[2026-05-09T20:09:53.807+00:00] [INFO] Property packages from collection: 2 (names may be empty pre-walk)
+[2026-05-09T20:09:53.807+00:00] [INFO] Calling CalculateFlowsheet4...
+[2026-05-09T20:09:56.848+00:00] [INFO] Solve duration: 3.040s
+[2026-05-09T20:09:56.849+00:00] [INFO] Errors returned: 0
+[2026-05-09T20:09:56.849+00:00] [INFO] sim.Solved=True
+[2026-05-09T20:09:56.857+00:00] [INFO] Object: tag='SPEC-020', type=Spec, category=spec_block, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.858+00:00] [INFO] Object: tag='Heating Duty', type=EnergyStream, category=energy_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.868+00:00] [INFO] Object: tag='MSTR-018', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.886+00:00] [INFO] Object: tag='Thermal Oil Heating', type=Heater, category=heater, pp=CoolProp (Incompressible Fluids), subsystem=thermal_oil, calculated=True
+[2026-05-09T20:09:56.887+00:00] [INFO] Object: tag='ESTR-017', type=EnergyStream, category=energy_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.887+00:00] [INFO] Object: tag='Thermal Oil Pump', type=Pump, category=pump, pp=CoolProp (Incompressible Fluids), subsystem=thermal_oil, calculated=True
+[2026-05-09T20:09:56.888+00:00] [INFO] Object: tag='MSTR-014', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.889+00:00] [INFO] Object: tag='MSTR-013', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.889+00:00] [INFO] Object: tag='REC-012', type=Recycle, category=recycle, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.889+00:00] [INFO] Object: tag='Reboiler (Proxy)', type=Heater, category=heater, pp=CoolProp (Incompressible Fluids), subsystem=thermal_oil, calculated=True
+[2026-05-09T20:09:56.890+00:00] [INFO] Object: tag='MSTR-010', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.890+00:00] [INFO] Object: tag='Therminol VP1', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.892+00:00] [INFO] Object: tag='Therminol VP1 Storage Tank', type=Tank, category=tank, pp=Peng-Robinson (PR), subsystem=petroleum, calculated=True
+[2026-05-09T20:09:56.892+00:00] [INFO] Object: tag='Condenser Duty', type=EnergyStream, category=energy_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.893+00:00] [INFO] Object: tag='Reboiler Duty', type=EnergyStream, category=energy_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.893+00:00] [INFO] Object: tag='"Heavy" Product', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.893+00:00] [INFO] Object: tag='Intermediate Product', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.894+00:00] [INFO] Object: tag='Light Intermediate product', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.894+00:00] [INFO] Object: tag='Light Product', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.894+00:00] [INFO] Object: tag='Distillation Column', type=DistillationColumn, category=column, pp=Peng-Robinson (PR), subsystem=petroleum, calculated=True
+[2026-05-09T20:09:56.895+00:00] [INFO] Object: tag='Oil', type=MaterialStream, category=material_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.895+00:00] [INFO] Object: tag='Reboiler Duty (2)', type=EnergyStream, category=energy_stream, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.895+00:00] [INFO] Object: tag='SPEC-02', type=Spec, category=spec_block, pp=None, subsystem=None, calculated=True
+[2026-05-09T20:09:56.901+00:00] [INFO]   pass=0 traced 'Heating Duty' → thermal_oil
+[2026-05-09T20:09:56.901+00:00] [INFO]   pass=0 traced 'MSTR-018' → thermal_oil
+[2026-05-09T20:09:56.902+00:00] [INFO]   pass=0 traced 'ESTR-017' → thermal_oil
+[2026-05-09T20:09:56.902+00:00] [INFO]   pass=0 traced 'MSTR-014' → thermal_oil
+[2026-05-09T20:09:56.903+00:00] [INFO]   pass=0 traced 'MSTR-013' → thermal_oil
+[2026-05-09T20:09:56.903+00:00] [INFO]   pass=0 traced 'REC-012' → thermal_oil
+[2026-05-09T20:09:56.903+00:00] [INFO]   pass=0 traced 'Condenser Duty' → petroleum
+[2026-05-09T20:09:56.904+00:00] [INFO]   pass=0 traced 'Reboiler Duty' → thermal_oil
+[2026-05-09T20:09:56.904+00:00] [INFO]   pass=0 traced '"Heavy" Product' → petroleum
+[2026-05-09T20:09:56.904+00:00] [INFO]   pass=0 traced 'Intermediate Product' → petroleum
+[2026-05-09T20:09:56.904+00:00] [INFO]   pass=0 traced 'Light Intermediate product' → petroleum
+[2026-05-09T20:09:56.905+00:00] [INFO]   pass=0 traced 'Light Product' → petroleum
+[2026-05-09T20:09:56.907+00:00] [INFO]   pass=0 traced 'Oil' → petroleum
+[2026-05-09T20:09:56.907+00:00] [INFO]   pass=0 traced 'Reboiler Duty (2)' → petroleum
+[2026-05-09T20:09:56.913+00:00] [INFO] Stream 'MSTR-010' subsystem (composition-fallback): thermal_oil
+[2026-05-09T20:09:56.914+00:00] [INFO] Stream 'Therminol VP1' subsystem (composition-fallback): thermal_oil
+[2026-05-09T20:09:57.418+00:00] [INFO] Running guards (Bug 4, Bug 6, Bug 8)...
+[2026-05-09T20:09:57.421+00:00] [INFO]   bug4_zombie_composition: PASS
+[2026-05-09T20:09:57.424+00:00] [INFO]   bug6_false_convergence: PASS
+[2026-05-09T20:09:57.424+00:00] [INFO]   bug8_stage_count_parity: PASS
+[2026-05-09T20:09:57.424+00:00] [INFO] Building tag/setpoint/constraint dictionaries...
+[2026-05-09T20:09:57.441+00:00] [INFO] Tag count: 1550
+[2026-05-09T20:09:57.441+00:00] [INFO] Setpoint count: 39
+[2026-05-09T20:09:57.441+00:00] [INFO] Constraint count: 2
+[2026-05-09T20:09:57.441+00:00] [INFO] Cross-checking against architect ground truth...
+[2026-05-09T20:09:57.442+00:00] [INFO]   condenser_duty_kW: expected 29760.0, got 29755.277819677172, ok=True
+[2026-05-09T20:09:57.442+00:00] [INFO]   reboiler_duty_kW: expected -27280.0, got -27281.184948998965, ok=True
+[2026-05-09T20:09:57.442+00:00] [INFO]   therminol_mass_flow_kg_s: expected 200.0, got 200.0, ok=True
+[2026-05-09T20:09:57.442+00:00] [INFO]   oil_vapor_fraction: expected 0.172, got 0.17157324296600474, ok=True
+[2026-05-09T20:09:57.442+00:00] [INFO]   column_stages: expected 12, got 12, ok=True
+[2026-05-09T20:09:57.442+00:00] [INFO]   compound_count: expected 30, got 30, ok=True
+[2026-05-09T20:09:57.474+00:00] [INFO] Wrote /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_inventory.json (575589 bytes)
+[2026-05-09T20:09:57.496+00:00] [INFO] Wrote /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_tag_dictionary.json (720440 bytes)
+[2026-05-09T20:09:57.497+00:00] [INFO] Wrote /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_setpoint_dictionary.json (17596 bytes)
+[2026-05-09T20:09:57.498+00:00] [INFO] Wrote /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_constraint_dictionary.json (15223 bytes)
+[2026-05-09T20:09:57.499+00:00] [INFO] Wrote /Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_findings.md
+[2026-05-09T20:09:57.499+00:00] [INFO] ======================================================================
+[2026-05-09T20:09:57.499+00:00] [INFO] Phase 0a probe complete
+[2026-05-09T20:09:57.499+00:00] [INFO]   Tag count: 1550 (acceptance ≥1200, range [800, 2500])
+[2026-05-09T20:09:57.499+00:00] [INFO]   Setpoint count: 39 (acceptance ≥5)
+[2026-05-09T20:09:57.499+00:00] [INFO]   Constraint count: 2 (acceptance =2)
+[2026-05-09T20:09:57.499+00:00] [INFO]   Solve duration: 3.040s

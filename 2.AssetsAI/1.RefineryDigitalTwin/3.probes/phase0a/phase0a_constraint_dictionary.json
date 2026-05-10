@@ -1,0 +1,672 @@
+[
+  {
+    "constraint_id": "SPEC-020",
+    "internal_name": "ES-0325ac82-412b-4d7c-9f81-e35c1acda85c",
+    "object_type": "Spec",
+    "subsystem": null,
+    "target_object": "Heating Duty",
+    "target_property": "Heating Duty",
+    "source_object": "Reboiler Duty (2)",
+    "source_property": "Reboiler Duty (2)",
+    "expression": "X",
+    "spec_calculation_mode": 0.0,
+    "status": "",
+    "calculated": true,
+    "visible": true,
+    "active": true,
+    "source_object_data": {
+      "ID": "EN-5ba5374e-4ee5-4dbc-9203-ddbf1e8b31ed",
+      "Name": "Reboiler Duty (2)",
+      "PropertyName": "PROP_ES_0",
+      "Units": ""
+    },
+    "target_object_data": {
+      "ID": "EN-488f0e0e-a9b8-4252-b1f3-f83aa7753dfe",
+      "Name": "Heating Duty",
+      "PropertyName": "PROP_ES_0",
+      "Units": ""
+    },
+    "all_properties": [
+      {
+        "name": "SupportsDynamicMode",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "HasPropertiesForDynamicMode",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "SpecCalculationMode",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "ReferenceObjectID",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "CalculateTargetObject",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "MaxVal",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "MinVal",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "Expr",
+        "value": "X",
+        "can_write": true
+      },
+      {
+        "name": "ExpContext",
+        "value": "Ciloci.Flee.ExpressionContext",
+        "can_write": true
+      },
+      {
+        "name": "Status",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "Expression",
+        "value": "X",
+        "can_write": true
+      },
+      {
+        "name": "SourceObjectData",
+        "value": "DWSIM.UnitOperations.SpecialOps.Helpers.SpecialOpObjectInfo",
+        "can_write": true
+      },
+      {
+        "name": "TargetObjectData",
+        "value": "DWSIM.UnitOperations.SpecialOps.Helpers.SpecialOpObjectInfo",
+        "can_write": true
+      },
+      {
+        "name": "SourceObject",
+        "value": "Reboiler Duty (2)",
+        "can_write": true
+      },
+      {
+        "name": "TargetObject",
+        "value": "Heating Duty",
+        "can_write": true
+      },
+      {
+        "name": "MobileCompatible",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "ObjectClass",
+        "value": 10.0,
+        "can_write": true
+      },
+      {
+        "name": "LastSolutionInputSnapshot",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "IsDirty",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "CanUsePreviousResults",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "DynamicsSpec",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "DynamicsOnly",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "ExtraProperties",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesUnitTypes",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesDescriptions",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesTypes",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "Visible",
+        "value": true,
+        "can_write": true
+      },
+      {
+        "name": "OverrideCalculationRoutine",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "StoreDetailedDebugReport",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "DetailedDebugReport",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "IsFunctional",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "ComponentDescription",
+        "value": "Especificao",
+        "can_write": true
+      },
+      {
+        "name": "ComponentName",
+        "value": "ES-0325ac82-412b-4d7c-9f81-e35c1acda85c",
+        "can_write": true
+      },
+      {
+        "name": "AttachedUtilities",
+        "value": "System.Collections.Generic.List`1[DWSIM.Interfaces.IAttachedUtility]",
+        "can_write": true
+      },
+      {
+        "name": "PreferredFlashAlgorithmTag",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "Calculated",
+        "value": true,
+        "can_write": true
+      },
+      {
+        "name": "DebugMode",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "DebugText",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "LastUpdated",
+        "value": "1/1/0001 12:00:00 AM",
+        "can_write": true
+      },
+      {
+        "name": "EnergyFlow",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "ErrorMessage",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "Annotation",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "IsAdjustAttached",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "AttachedAdjustId",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "AdjustVarType",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "IsSpecAttached",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "AttachedSpecId",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "SpecVarType",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "Name",
+        "value": "ES-0325ac82-412b-4d7c-9f81-e35c1acda85c",
+        "can_write": true
+      },
+      {
+        "name": "UserDefinedChartNames",
+        "value": "System.Collections.Generic.List`1[System.String]",
+        "can_write": true
+      },
+      {
+        "name": "CreateChartAction",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "ProductName",
+        "value": "Specification Block",
+        "can_write": false
+      },
+      {
+        "name": "ProductDescription",
+        "value": "Defines a dependent variable/object from other variables/objects",
+        "can_write": false
+      },
+      {
+        "name": "ProductAuthor",
+        "value": "Daniel Wagner",
+        "can_write": false
+      },
+      {
+        "name": "ProductContactInfo",
+        "value": "https://dwsim.inforside.com.br",
+        "can_write": false
+      },
+      {
+        "name": "ProductPage",
+        "value": "https://dwsim.inforside.com.br",
+        "can_write": false
+      },
+      {
+        "name": "ProductVersion",
+        "value": "9.0.5.0",
+        "can_write": false
+      },
+      {
+        "name": "ProductAssembly",
+        "value": "DWSIM.SharedClasses",
+        "can_write": false
+      },
+      {
+        "name": "IsSource",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "IsSink",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "GHGEmissionData",
+        "value": null,
+        "can_write": true
+      }
+    ]
+  },
+  {
+    "constraint_id": "SPEC-02",
+    "internal_name": "ES-ed0eaf50-30e1-4607-86ed-96757759e627",
+    "object_type": "Spec",
+    "subsystem": null,
+    "target_object": "Reboiler Duty",
+    "target_property": "Reboiler Duty",
+    "source_object": "Reboiler Duty (2)",
+    "source_property": "Reboiler Duty (2)",
+    "expression": "-X",
+    "spec_calculation_mode": 0.0,
+    "status": "",
+    "calculated": true,
+    "visible": true,
+    "active": true,
+    "source_object_data": {
+      "ID": "EN-5ba5374e-4ee5-4dbc-9203-ddbf1e8b31ed",
+      "Name": "Reboiler Duty (2)",
+      "PropertyName": "PROP_ES_0",
+      "Units": ""
+    },
+    "target_object_data": {
+      "ID": "EN-8ca8df4d-4e76-4295-b1d5-66a5b300b88c",
+      "Name": "Reboiler Duty",
+      "PropertyName": "PROP_ES_0",
+      "Units": ""
+    },
+    "all_properties": [
+      {
+        "name": "SupportsDynamicMode",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "HasPropertiesForDynamicMode",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "SpecCalculationMode",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "ReferenceObjectID",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "CalculateTargetObject",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "MaxVal",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "MinVal",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "Expr",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "ExpContext",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "Status",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "Expression",
+        "value": "-X",
+        "can_write": true
+      },
+      {
+        "name": "SourceObjectData",
+        "value": "DWSIM.UnitOperations.SpecialOps.Helpers.SpecialOpObjectInfo",
+        "can_write": true
+      },
+      {
+        "name": "TargetObjectData",
+        "value": "DWSIM.UnitOperations.SpecialOps.Helpers.SpecialOpObjectInfo",
+        "can_write": true
+      },
+      {
+        "name": "SourceObject",
+        "value": "Reboiler Duty (2)",
+        "can_write": true
+      },
+      {
+        "name": "TargetObject",
+        "value": "Reboiler Duty",
+        "can_write": true
+      },
+      {
+        "name": "MobileCompatible",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "ObjectClass",
+        "value": 10.0,
+        "can_write": true
+      },
+      {
+        "name": "LastSolutionInputSnapshot",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "IsDirty",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "CanUsePreviousResults",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "DynamicsSpec",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "DynamicsOnly",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "ExtraProperties",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesUnitTypes",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesDescriptions",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "ExtraPropertiesTypes",
+        "value": "System.Dynamic.ExpandoObject",
+        "can_write": true
+      },
+      {
+        "name": "Visible",
+        "value": true,
+        "can_write": true
+      },
+      {
+        "name": "OverrideCalculationRoutine",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "StoreDetailedDebugReport",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "DetailedDebugReport",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "IsFunctional",
+        "value": true,
+        "can_write": false
+      },
+      {
+        "name": "ComponentDescription",
+        "value": "Especificao",
+        "can_write": true
+      },
+      {
+        "name": "ComponentName",
+        "value": "ES-ed0eaf50-30e1-4607-86ed-96757759e627",
+        "can_write": true
+      },
+      {
+        "name": "AttachedUtilities",
+        "value": "System.Collections.Generic.List`1[DWSIM.Interfaces.IAttachedUtility]",
+        "can_write": true
+      },
+      {
+        "name": "PreferredFlashAlgorithmTag",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "Calculated",
+        "value": true,
+        "can_write": true
+      },
+      {
+        "name": "DebugMode",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "DebugText",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "LastUpdated",
+        "value": "1/1/0001 12:00:00 AM",
+        "can_write": true
+      },
+      {
+        "name": "EnergyFlow",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "ErrorMessage",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "Annotation",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "IsAdjustAttached",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "AttachedAdjustId",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "AdjustVarType",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "IsSpecAttached",
+        "value": false,
+        "can_write": true
+      },
+      {
+        "name": "AttachedSpecId",
+        "value": "",
+        "can_write": true
+      },
+      {
+        "name": "SpecVarType",
+        "value": 0.0,
+        "can_write": true
+      },
+      {
+        "name": "Name",
+        "value": "ES-ed0eaf50-30e1-4607-86ed-96757759e627",
+        "can_write": true
+      },
+      {
+        "name": "UserDefinedChartNames",
+        "value": "System.Collections.Generic.List`1[System.String]",
+        "can_write": true
+      },
+      {
+        "name": "CreateChartAction",
+        "value": null,
+        "can_write": true
+      },
+      {
+        "name": "ProductName",
+        "value": "Specification Block",
+        "can_write": false
+      },
+      {
+        "name": "ProductDescription",
+        "value": "Defines a dependent variable/object from other variables/objects",
+        "can_write": false
+      },
+      {
+        "name": "ProductAuthor",
+        "value": "Daniel Wagner",
+        "can_write": false
+      },
+      {
+        "name": "ProductContactInfo",
+        "value": "https://dwsim.inforside.com.br",
+        "can_write": false
+      },
+      {
+        "name": "ProductPage",
+        "value": "https://dwsim.inforside.com.br",
+        "can_write": false
+      },
+      {
+        "name": "ProductVersion",
+        "value": "9.0.5.0",
+        "can_write": false
+      },
+      {
+        "name": "ProductAssembly",
+        "value": "DWSIM.SharedClasses",
+        "can_write": false
+      },
+      {
+        "name": "IsSource",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "IsSink",
+        "value": false,
+        "can_write": false
+      },
+      {
+        "name": "GHGEmissionData",
+        "value": null,
+        "can_write": true
+      }
+    ]
+  }
+]

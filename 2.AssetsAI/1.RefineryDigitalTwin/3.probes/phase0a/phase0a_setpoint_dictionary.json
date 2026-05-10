@@ -1,0 +1,631 @@
+[
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "OutletTemperature",
+    "description": "OutletTemperature",
+    "current_value": 490.6332348890086,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": 470.6332348890086,
+      "high": 510.6332348890086,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "CalcMode",
+    "description": "CalcMode",
+    "current_value": 2.0,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "DeltaP",
+    "description": "DeltaP",
+    "current_value": 50000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 40000.0,
+      "high": 60000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "HeatDuty",
+    "description": "HeatDuty",
+    "current_value": 27275.7263999042,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 21820.58111992336,
+      "high": 32730.87167988504
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "Efficiency",
+    "description": "Efficiency",
+    "current_value": 100.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "absolute",
+      "low": 0.5,
+      "high": 1.0
+    },
+    "bounds_kind": "efficiency",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "PressureDrop",
+    "description": "PressureDrop",
+    "current_value": 50000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 40000.0,
+      "high": 60000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "TemperatureChange",
+    "description": "TemperatureChange",
+    "current_value": 68.2238144926248,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": 48.2238144926248,
+      "high": 88.2238144926248,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Heating",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "OutletTemperature",
+    "description": "OutletTemperature",
+    "current_value": 422.4094203963838,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": 402.4094203963838,
+      "high": 442.4094203963838,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "Efficiency",
+    "description": "Efficiency",
+    "current_value": 75.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "absolute",
+      "low": 0.5,
+      "high": 1.0
+    },
+    "bounds_kind": "efficiency",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "HeatDuty",
+    "description": "HeatDuty",
+    "current_value": 27.859033700250446,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 22.287226960200357,
+      "high": 33.430840440300535
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "PressureIncrease",
+    "description": "PressureIncrease",
+    "current_value": 100000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 80000.0,
+      "high": 120000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "TemperatureChange",
+    "description": "TemperatureChange",
+    "current_value": 0.038531175991806776,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": -19.961468824008193,
+      "high": 20.038531175991807,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "CalcMode",
+    "description": "CalcMode",
+    "current_value": 0.0,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "FixOnDeltaP",
+    "description": "FixOnDeltaP",
+    "current_value": true,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "DeltaP",
+    "description": "DeltaP",
+    "current_value": 100000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 80000.0,
+      "high": 120000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Thermal Oil Pump",
+    "owner_type": "Pump",
+    "subsystem": "thermal_oil",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on pump matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "REC-012",
+    "owner_type": "Recycle",
+    "subsystem": "thermal_oil",
+    "property_key": "LegacyMode",
+    "description": "LegacyMode",
+    "current_value": true,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on recycle matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "REC-012",
+    "owner_type": "Recycle",
+    "subsystem": "thermal_oil",
+    "property_key": "MaximumIterations",
+    "description": "MaximumIterations",
+    "current_value": 50,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 40.0,
+      "high": 60.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on recycle matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "REC-012",
+    "owner_type": "Recycle",
+    "subsystem": "thermal_oil",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on recycle matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "OutletTemperature",
+    "description": "OutletTemperature",
+    "current_value": 422.44382273039605,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": 402.44382273039605,
+      "high": 442.44382273039605,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "CalcMode",
+    "description": "CalcMode",
+    "current_value": 2.0,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "DeltaP",
+    "description": "DeltaP",
+    "current_value": 50000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 40000.0,
+      "high": 60000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "HeatDuty",
+    "description": "HeatDuty",
+    "current_value": -27275.7263999042,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": -32730.87167988504,
+      "high": -21820.58111992336
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "Efficiency",
+    "description": "Efficiency",
+    "current_value": 100.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "absolute",
+      "low": 0.5,
+      "high": 1.0
+    },
+    "bounds_kind": "efficiency",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "PressureDrop",
+    "description": "PressureDrop",
+    "current_value": 50000.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 40000.0,
+      "high": 60000.0
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "TemperatureChange",
+    "description": "TemperatureChange",
+    "current_value": -68.18941215861253,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": -88.18941215861253,
+      "high": -48.18941215861253,
+      "unit_assumed": "K"
+    },
+    "bounds_kind": "temperature",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Reboiler (Proxy)",
+    "owner_type": "Heater",
+    "subsystem": "thermal_oil",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on heater matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Therminol VP1 Storage Tank",
+    "owner_type": "Tank",
+    "subsystem": "thermal_oil",
+    "property_key": "DeltaP",
+    "description": "DeltaP",
+    "current_value": null,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-numeric",
+    "rationale": "writable property on tank matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Therminol VP1 Storage Tank",
+    "owner_type": "Tank",
+    "subsystem": "thermal_oil",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "writable property on tank matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "ColumnPressureDrop",
+    "description": "ColumnPressureDrop",
+    "current_value": null,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-numeric",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "InternalLoopTolerance",
+    "description": "InternalLoopTolerance",
+    "current_value": 0.0001,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 8e-05,
+      "high": 0.00012
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "ExternalLoopTolerance",
+    "description": "ExternalLoopTolerance",
+    "current_value": 0.001,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 0.0008,
+      "high": 0.0012000000000000001
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "CondenserDeltaP",
+    "description": "CondenserDeltaP",
+    "current_value": 0.0,
+    "unit_si": null,
+    "bounds": {
+      "type": "delta",
+      "low": -1.0,
+      "high": 1.0,
+      "note": "current value 0; bounds are ±1 placeholder"
+    },
+    "bounds_kind": "default_pct_zero",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "ReboilerDuty",
+    "description": "ReboilerDuty",
+    "current_value": -27281.184948998965,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": -32737.421938798758,
+      "high": -21824.947959199173
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "CondenserDuty",
+    "description": "CondenserDuty",
+    "current_value": 29755.277819677172,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 23804.222255741737,
+      "high": 35706.33338361261
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "RefluxRatio",
+    "description": "RefluxRatio",
+    "current_value": 2.4987072531873755,
+    "unit_si": null,
+    "bounds": {
+      "type": "pct",
+      "pct": 0.2,
+      "low": 1.9989658025499004,
+      "high": 2.9984487038248506
+    },
+    "bounds_kind": "default_pct",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": true
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "UseTemperatureEstimates",
+    "description": "UseTemperatureEstimates",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": false
+  },
+  {
+    "owner_tag": "Distillation Column",
+    "owner_type": "DistillationColumn",
+    "subsystem": "petroleum",
+    "property_key": "DebugMode",
+    "description": "DebugMode",
+    "current_value": false,
+    "unit_si": null,
+    "bounds": null,
+    "bounds_kind": "non-perturbable",
+    "rationale": "column writable property matching spec pattern",
+    "perturbable": false
+  }
+]

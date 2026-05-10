@@ -1,0 +1,14 @@
+[2026-05-10T03:07:47.547+00:00] ======================================================================
+[2026-05-10T03:07:47.548+00:00] Streamer starting PID=32022 interval=30.0s
+[2026-05-10T03:07:47.548+00:00]   substrate=/Applications/DWSIM.app/Contents/MonoBundle/samples/Petroleum Distillation with Reboiler Heating Fluid.dwxmz
+[2026-05-10T03:07:47.549+00:00]   tag_dict=/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_tag_dictionary.json
+[2026-05-10T03:07:47.549+00:00]   output_dir=/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/4.snapshots/stage1
+[2026-05-10T03:07:47.556+00:00]   tag count:  1550 (sanity gate passed)
+[2026-05-10T03:07:51.353+00:00] DWSIM Automation3 instantiated; loading flowsheet...
+[2026-05-10T03:07:56.321+00:00] Flowsheet loaded
+[2026-05-10T03:07:56.382+00:00] Object map: 23 entries; phase maps for 10 streams
+[2026-05-10T03:07:56.382+00:00] Initial solve (gate)...
+[2026-05-10T03:08:00.054+00:00] Initial solve duration: 3.671s
+[2026-05-10T03:08:00.055+00:00] Initial solve OK; entering main loop
+[2026-05-10T03:08:02.128+00:00] cycle=0 solved=true tags=1550/1550 errors=0 duration=2.068s
+[2026-05-10T03:08:32.864+00:00] cycle=1 solved=true tags=1550/1550 errors=0 duration=2.8s

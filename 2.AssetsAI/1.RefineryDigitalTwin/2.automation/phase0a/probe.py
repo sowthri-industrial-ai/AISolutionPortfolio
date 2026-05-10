@@ -95,6 +95,24 @@ ENERGY_NAME_FALLBACK = [
     ("Reboiler Duty", "petroleum"),
 ]
 
+# Architect overrides (post-attempt-3 review).
+#
+# Rule 1: when DWSIM property-package metadata disagrees with topology,
+# topology wins. Storage Tank carries a stale PR-package assignment from
+# initial flowsheet construction but is part of the thermal oil loop.
+UNIT_OP_SUBSYSTEM_OVERRIDE = {
+    "Therminol VP1 Storage Tank": "thermal_oil",
+}
+
+# Rule 2: energy streams sitting at the subsystem hand-off are classified
+# by operator convention, not pure topology trace. "Reboiler Duty" connects
+# topologically to the Reboiler (Proxy) heater (thermal_oil) but is
+# semantically the column's reboiler duty — dashboards and agents look for
+# it on the petroleum side.
+ENERGY_STREAM_SUBSYSTEM_OVERRIDE = {
+    "Reboiler Duty": "petroleum",
+}
+
 
 # ============================================================================
 # Tag ID normalization (Q1)

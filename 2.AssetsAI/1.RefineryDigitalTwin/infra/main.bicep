@@ -1,9 +1,13 @@
 // Refinery Digital Twin — root deployment. Subscription-scoped: creates the
-// resource group, then deploys a placeholder Static Web App into it.
+// resource group, then deploys the placeholder Static Web App and the Event
+// Hubs namespace + hub for the Stage 5 producer.
 //
-// Phase 1 foundation: only a Static Web App. Stages 2-6 + Features 1, 2, 3, 5
-// add Eventhouse, Eventstream, Fabric IQ, Foundry, AI Search, etc. — all
-// modular additions on top of this skeleton.
+// Phase 1 foundation:    Static Web App.
+// Phase 3 (A1 Wave 1):   Event Hubs Basic + producer-send rule (this file).
+// Phase 3 (A1 Wave 2):   Fabric F2 capacity. The fabric_capacity.bicep
+//                        module file exists alongside this one but is NOT
+//                        invoked yet — Wave 2 wires it in (one-line module
+//                        block + adminEmail param from Part A tenant setup).
 
 targetScope = 'subscription'
 
@@ -53,6 +57,21 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
   }
 }
 
+// Event Hubs namespace + hub + producer-send authorization rule. Stage 5
+// producer reads the hub-scoped connection string (which includes EntityPath)
+// from `EVENT_HUB_CONNECTION_STRING` env var; operator fetches via
+// `az eventhubs eventhub authorization-rule keys list` post-deploy.
+module eventHub 'modules/eventhub.bicep' = {
+  scope: rg
+  name: 'eventhub'
+  params: {
+    namespaceName: 'evhns-refinerydigitaltwin-${environmentName}-${resourceToken}'
+    eventHubName: 'dwsim-snapshots'
+    location: location
+    tags: tags
+  }
+}
+
 // ----- outputs (consumed by `azd env get-values`) -----
 
 output AZURE_RESOURCE_GROUP string = rg.name
@@ -60,6 +79,12 @@ output AZURE_LOCATION string = location
 
 output STATIC_WEB_APP_NAME string = staticWebApp.outputs.name
 output DEMO_URL string = 'https://${staticWebApp.outputs.defaultHostname}'
+
+// Event Hubs outputs — consumed by the operator to assemble the connection
+// string for the Stage 5 producer's EVENT_HUB_CONNECTION_STRING env var.
+output EVENT_HUB_NAMESPACE string = eventHub.outputs.eventHubNamespaceName
+output EVENT_HUB_NAME string = eventHub.outputs.eventHubName
+output EVENT_HUB_SEND_RULE_NAME string = eventHub.outputs.sendRuleName
 
 // Briefing-spec output names (item 4): RESOURCE_GROUP_NAME + DEMO_URL.
 // AZURE_RESOURCE_GROUP is the azd convention; both are exported.

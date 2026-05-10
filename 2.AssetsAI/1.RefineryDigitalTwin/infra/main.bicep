@@ -1,13 +1,17 @@
 // Refinery Digital Twin — root deployment. Subscription-scoped: creates the
-// resource group, then deploys the placeholder Static Web App and the Event
-// Hubs namespace + hub for the Stage 5 producer.
+// resource group, then deploys the placeholder Static Web App, Event Hubs
+// (for Stage 5 producer), and Azure Data Explorer (cluster + database +
+// data connection) for KQL ingestion.
 //
 // Phase 1 foundation:    Static Web App.
-// Phase 3 (A1 Wave 1):   Event Hubs Basic + producer-send rule (this file).
-// Phase 3 (A1 Wave 2):   Fabric F2 capacity. The fabric_capacity.bicep
-//                        module file exists alongside this one but is NOT
-//                        invoked yet — Wave 2 wires it in (one-line module
-//                        block + adminEmail param from Part A tenant setup).
+// Phase 3 (A1 Wave 1):   Event Hubs Basic + producer-send rule.
+// Phase 3 (F1B pivot):   Azure Data Explorer Dev SKU cluster, twin_db
+//                        database with snapshots table, and EventHub data
+//                        connection authenticated via the cluster's system-
+//                        assigned managed identity (Azure Event Hubs Data
+//                        Receiver role on the hub). Replaces the original
+//                        Microsoft Fabric plan — ADX runs on the existing
+//                        personal subscription and needs no new tenant.
 
 targetScope = 'subscription'
 
@@ -72,6 +76,50 @@ module eventHub 'modules/eventhub.bicep' = {
   }
 }
 
+// Azure Data Explorer cluster (Dev SKU, system-assigned MI). Pause/resume
+// via deploy.yml's resume/pause actions to control compute billing.
+// Cluster name: lowercase letters/digits only, no hyphens, 4-22 chars.
+// `adxrdt${env}${take(token, 8)}` is 17-21 chars — fits the limit.
+module adxCluster 'modules/adx_cluster.bicep' = {
+  scope: rg
+  name: 'adx-cluster'
+  params: {
+    name: 'adxrdt${environmentName}${take(resourceToken, 8)}'
+    location: location
+    tags: tags
+  }
+}
+
+// twin_db database — schema bootstrapped at deploy time via embedded KQL
+// admin script (snapshots table + JSON ingestion mapping).
+module adxDatabase 'modules/adx_database.bicep' = {
+  scope: rg
+  name: 'adx-database'
+  params: {
+    clusterName: adxCluster.outputs.clusterName
+    databaseName: 'twin_db'
+    location: location
+  }
+}
+
+// Event Hub data connection — system-MI auth + dedicated consumer group
+// `adx-twin` + role assignment (Azure Event Hubs Data Receiver scoped to
+// the specific hub). On `az kusto cluster stop`, ingestion pauses; on
+// resume, picks up from consumer-group checkpoint. Event Hub Basic SKU has
+// 1-day retention — ADX stopped >24 h drops queued events.
+module adxDataConnection 'modules/adx_data_connection.bicep' = {
+  scope: rg
+  name: 'adx-data-connection'
+  params: {
+    clusterName: adxCluster.outputs.clusterName
+    databaseName: adxDatabase.outputs.databaseName
+    eventHubNamespaceName: eventHub.outputs.eventHubNamespaceName
+    eventHubName: eventHub.outputs.eventHubName
+    clusterPrincipalId: adxCluster.outputs.principalId
+    location: location
+  }
+}
+
 // ----- outputs (consumed by `azd env get-values`) -----
 
 output AZURE_RESOURCE_GROUP string = rg.name
@@ -85,6 +133,14 @@ output DEMO_URL string = 'https://${staticWebApp.outputs.defaultHostname}'
 output EVENT_HUB_NAMESPACE string = eventHub.outputs.eventHubNamespaceName
 output EVENT_HUB_NAME string = eventHub.outputs.eventHubName
 output EVENT_HUB_SEND_RULE_NAME string = eventHub.outputs.sendRuleName
+
+// ADX outputs — consumed by KQL queries (cluster URI + database name) and
+// by deploy.yml resume/pause via runtime `az kusto cluster list` discovery
+// (cluster name).
+output AZURE_KUSTO_CLUSTER_NAME string = adxCluster.outputs.clusterName
+output AZURE_KUSTO_CLUSTER_URI string = adxCluster.outputs.clusterUri
+output AZURE_KUSTO_DATABASE string = adxDatabase.outputs.databaseName
+output AZURE_KUSTO_INGESTION_URI string = adxCluster.outputs.dataIngestionUri
 
 // Briefing-spec output names (item 4): RESOURCE_GROUP_NAME + DEMO_URL.
 // AZURE_RESOURCE_GROUP is the azd convention; both are exported.

@@ -28,14 +28,17 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+  - repo: local
     hooks:
+      # mypy runs in the project's uv-managed venv (not pre-commit's ephemeral
+      # one) so it sees pydantic, pytest, langgraph, openai, etc. as deps land.
+      # Avoids the additional_dependencies maintenance treadmill.
       - id: mypy
-        args: [--strict]
-        # Repo-root-relative path (top-level files: filter is ANDed with this)
-        files: ^1\.AgenticAI/1\.HelloAgenticAI/framework/
-        additional_dependencies: []
+        name: mypy --strict (project venv via uv)
+        entry: uv --directory 1.AgenticAI/1.HelloAgenticAI run mypy --strict framework/
+        language: system
+        pass_filenames: false
+        files: ^1\.AgenticAI/1\.HelloAgenticAI/framework/.*\.py$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2

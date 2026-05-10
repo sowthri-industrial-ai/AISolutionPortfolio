@@ -1,1 +1,6 @@
 infra/placeholder/package-lock.json
+
+# Stage 5 producer runtime state — local cache, not source
+2.automation/stage5/position.json
+2.automation/stage5/position.json.tmp
+2.automation/stage5/producer.log

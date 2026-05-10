@@ -33,7 +33,11 @@ T = TypeVar("T", bound=BaseModel)
 class AzureOpenAIClient:
     """Async Azure OpenAI client wrapper with typed methods."""
 
-    DEFAULT_API_VERSION = "2024-10-21"
+    # 2024-10-21 (GA) returned 401 PermissionDenied for the dev principal on
+    # the swedencentral account even with a correct AAD bearer token; the
+    # 2024-10-01-preview surface works and supports chat.completions.parse.
+    # See ADR-0003 risk #7 for the empirical investigation.
+    DEFAULT_API_VERSION = "2024-10-01-preview"
     SCOPE = "https://cognitiveservices.azure.com/.default"
 
     def __init__(

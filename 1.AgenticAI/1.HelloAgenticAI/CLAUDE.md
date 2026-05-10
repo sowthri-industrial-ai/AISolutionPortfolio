@@ -33,6 +33,7 @@ Full architecture: `docs/ARCHITECTURE.md`. Build plan: `PROJECT_PLAN.md`. Read b
 - No keys or secrets in code anywhere. Use `DefaultAzureCredential` for Azure auth, env vars for non-Azure tokens (managed via Key Vault references in production).
 - Pydantic models for all structured I/O between agent nodes and tools.
 - Async by default for I/O.
+- When a package exposes async APIs via optional extras (e.g. `azure-storage-blob[aio]`), declare the extras in `pyproject.toml` — never add the underlying transport (`aiohttp`, `httpx`) as a separate top-level dep. Extras are the package author's stable contract; explicit transports leak the package's internal choice into our dep graph. (Exception: `azure-cosmos` as of v4.15.0 has no `[aio]` extras — see comment in `pyproject.toml` and the upstream issue linked there. Re-check on every azure-cosmos version bump.)
 - One module per concern. Public API explicit in `__init__.py`.
 - Tests live next to code as `test_*.py` and in a top-level `tests/` for integration.
 - Conventional Commits format (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`).

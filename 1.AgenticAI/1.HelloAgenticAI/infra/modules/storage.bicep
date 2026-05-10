@@ -57,8 +57,10 @@ resource artefacts 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   }
 }
 
-// Storage Blob Data Contributor — Azure built-in role, public id
-var blobDataContribRoleId = 'ba92f5b4-2d11-450c-a6a6-6f6c0c0e98a3' // gitleaks:allow
+// Storage Blob Data Contributor — Azure built-in role, public id.
+// Verified via `az role definition list --name "Storage Blob Data Contributor"`
+// — always re-verify role IDs from the CLI before commit, never hand-type.
+var blobDataContribRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe' // gitleaks:allow
 
 resource roleAssign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: sa

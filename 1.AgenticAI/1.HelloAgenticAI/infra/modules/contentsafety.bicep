@@ -22,11 +22,11 @@ resource cs 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   identity: { type: 'SystemAssigned' }
   properties: {
     customSubDomainName: name
+    // ContentSafety doesn't support `networkAcls.bypass: AzureServices`
+    // (NetworkAclsBypassNotSupported). In v1 we rely on
+    // publicNetworkAccess: 'Enabled' alone — refinery verticals that need
+    // private endpoints will reintroduce networkAcls + Private Endpoint.
     publicNetworkAccess: 'Enabled'
-    networkAcls: {
-      defaultAction: 'Allow'
-      bypass: 'AzureServices'
-    }
     disableLocalAuth: true
   }
 }

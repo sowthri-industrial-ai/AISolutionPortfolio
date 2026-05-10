@@ -56,7 +56,9 @@ resource gpt4o 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   name: 'gpt-4o'
   sku: { name: 'GlobalStandard', capacity: chatLargeCapacity }
   properties: {
-    model: { format: 'OpenAI', name: 'gpt-4o', version: '2024-08-06' }
+    // 2024-08-06 entered deprecating state in May 2026; 2024-11-20 is the
+    // latest GA available in swedencentral as of 2026-05-10.
+    model: { format: 'OpenAI', name: 'gpt-4o', version: '2024-11-20' }
     versionUpgradeOption: 'OnceCurrentVersionExpired'
     raiPolicyName: 'Microsoft.DefaultV2'
   }

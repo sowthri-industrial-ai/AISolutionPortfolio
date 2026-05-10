@@ -89,7 +89,11 @@ uv run ruff check . && uv run ruff format .
 uv run mypy --strict framework/
 
 # Infra (require approval per workflow rule 4)
-cd infra && azd up                          # provision dev environment
+# MANDATORY preflight before any azd up — catches deprecation, role-id typos,
+# unsupported properties in ~30s instead of 5–8 min of partial failure. See
+# docs/decisions/0003-azd-up-preflight-risks.md.
+cd infra && azd provision --preview         # dry-run validation (no resources created)
+cd infra && azd up                          # provision dev environment (only after preview is clean)
 cd infra && azd deploy                      # deploy code only
 cd infra && azd down --purge                # full teardown
 ```

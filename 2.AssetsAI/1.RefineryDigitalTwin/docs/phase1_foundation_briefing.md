@@ -43,8 +43,8 @@ If any HelloAgenticAI reference pattern is unclear or seems stale, flag it; don'
 
 ```
 ~/Documents/AISolutionPortfolio/2.AssetsAI/1.RefineryDigitalTwin/
-├── 1.docs/              engineering docs (KB, briefings, findings)
-│                        NOTE: renamed to docs/ by operator post-Stage-1 (item 2)
+├── docs/                engineering docs (KB, briefings, findings)
+│                        (renamed from 1.docs/ in item 2 of this briefing)
 ├── 2.automation/        scripts (Phase 0a probe, Stage 1 streamer)
 ├── 3.probes/phase0a/    Phase 0a output artifacts (read-only references)
 ├── 4.snapshots/stage1/  Stage 1 streamer output (created by streamer)
@@ -277,7 +277,7 @@ on:
 - ✗ Add or remove pre-commit hooks (only add `files:` constraints)
 - ✗ Create RGs other than `rg-refinerydigitaltwin-dev`
 - ✗ Modify Phase 0a or Stage 1 artifacts in `3.probes/` or `4.snapshots/`
-- ✗ Touch `1.docs/` (or `docs/` after migration) beyond creating ARCHITECTURE.md and project-metadata.md
+- ✗ Touch `docs/` beyond creating ARCHITECTURE.md and project-metadata.md (and the migration noted in item 2)
 - ✗ Build anything in F1-F5 (Fabric, twin, agents, demo UI) — that's all later phases
 
 ## Methodology rules

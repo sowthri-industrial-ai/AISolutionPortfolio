@@ -21,8 +21,8 @@ param location string
 @description('Resource tags. azd-service-name added inside the module.')
 param tags object = {}
 
-@description('Cluster SKU. Dev(No SLA)_Standard_E2a_v4 is the smallest dev tier (~$0.30/hr running).')
-param skuName string = 'Dev(No SLA)_Standard_E2a_v4'
+@description('Cluster SKU. Dev(No SLA)_Standard_D11_v2 is the universally-available dev tier (~$0.34/hr running).')
+param skuName string = 'Dev(No SLA)_Standard_D11_v2'
 
 @description('Cluster SKU tier. Basic for Dev SKUs, Standard for prod.')
 @allowed([

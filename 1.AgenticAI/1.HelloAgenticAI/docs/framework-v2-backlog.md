@@ -63,5 +63,33 @@ zero-context form in v2.1.
 
 ---
 
+## Real /health route for Chainlit container probes
+
+**Surfaced in:** Phase 3
+
+**Severity:** Low — works today via TCP probes, but liveness != readiness.
+A wedged Python process that's still holding the port open looks healthy
+to TCP probes but can't actually serve users.
+
+**Workaround in tree:** `infra/modules/container-app.bicep` — probes use
+`tcpSocket` on port 8000 instead of `httpGet /health`.
+
+**v2 fix sketch:** Register a FastAPI route alongside Chainlit's server
+(Chainlit exposes `app.server.fastapi`) that returns 200 only if it can:
+(a) get a token via `DefaultAzureCredential` for both AOAI and Cosmos
+scopes, (b) ping AOAI deployments list, (c) ping Cosmos account read.
+Switch `container-app.bicep` probes back to `httpGet /health`. Probably
+30 lines of code + a Bicep flip.
+
+**What it unblocks:** Real liveness AND readiness signal. Catches
+credential expiry, network partitions, AOAI/Cosmos downtime — not just
+process death.
+
+**Migration path:** Add `/health` route → deploy + verify it returns 200
+from inside the container's network → flip Bicep probes back to
+`httpGet` → next `azd up`. Safe rollback (TCP probes work either way).
+
+---
+
 *This file lives at `docs/framework-v2-backlog.md`. Add new entries above
 this line, oldest at the bottom.*

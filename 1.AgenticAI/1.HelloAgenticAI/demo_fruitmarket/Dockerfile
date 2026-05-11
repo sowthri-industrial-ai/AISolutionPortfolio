@@ -51,12 +51,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Non-root runtime user (Container App best practice, defence-in-depth).
 RUN useradd --create-home --uid 1001 app
 WORKDIR /app
+# WORKDIR creates /app owned by root (mode 755). --chown on COPY only
+# affects the *contents* copied in, not /app itself — so without this
+# explicit chown the app user can read /app but can't create new
+# subdirectories in it. Chainlit's import-time
+# FILES_DIRECTORY.mkdir(exist_ok=True) creates /app/.files (a NEW
+# subdir of /app), which needs write perm on /app and crashes the
+# container at startup with PermissionError otherwise. Fix: chown the
+# WORKDIR itself before USER drops privileges.
+RUN chown app:app /app
 
-# Copy the resolved venv from the builder. --chown=app:app ensures the
-# non-root runtime user owns the file tree under /app — Chainlit's
-# import-time setup calls FILES_DIRECTORY.mkdir() (= /app/.files) and
-# without ownership the mkdir fails with PermissionError, crashing the
-# container at startup.
+# Copy the resolved venv from the builder. --chown=app:app keeps the
+# copied tree owned by the non-root runtime user (combined with the
+# /app chown above, the whole tree is writable by the app user).
 COPY --chown=app:app --from=builder /app/.venv /app/.venv
 
 # Copy the two source packages. Both must be on PYTHONPATH (= /app) so

@@ -178,10 +178,10 @@ class BerryBasket(FruitShopToolBase):
         "Blueberries, raspberries, blackberries — fresh-picked. Strawberries are off-season."
     )
     INVENTORY: ClassVar[dict[str, StockEntry]] = {
-        "blueberries": StockEntry(unit_price=4.00),
-        "raspberries": StockEntry(unit_price=4.50),
-        "blackberries": StockEntry(unit_price=4.20),
-        "strawberries": StockEntry(unit_price=3.80, in_stock=False),
+        "blueberry": StockEntry(unit_price=4.00),
+        "raspberry": StockEntry(unit_price=4.50),
+        "blackberry": StockEntry(unit_price=4.20),
+        "strawberry": StockEntry(unit_price=3.80, in_stock=False),
     }
 
 

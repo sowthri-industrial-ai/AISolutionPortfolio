@@ -129,15 +129,15 @@ async def test_pineapple_is_out_at_tropical_paradise() -> None:
 
 async def test_strawberries_oos_at_berry_basket_and_no_other_shop_has_them() -> None:
     """Hard-fail path the reflector must terminate cleanly on."""
-    berry = await BerryBasket().call(_basket(("strawberries", 1)))
-    assert berry.out_of_stock == ["strawberries"]
+    berry = await BerryBasket().call(_basket(("strawberry", 1)))
+    assert berry.out_of_stock == ["strawberry"]
     # No other shop has strawberries in inventory at all
     for shop_cls in ALL_SHOP_CLASSES:
         if shop_cls is BerryBasket:
             continue
         shop = shop_cls()
-        resp = await shop.call(_basket(("strawberries", 1)))
-        assert resp.out_of_stock == ["strawberries"]
+        resp = await shop.call(_basket(("strawberry", 1)))
+        assert resp.out_of_stock == ["strawberry"]
 
 
 # ---------- rationed path ----------

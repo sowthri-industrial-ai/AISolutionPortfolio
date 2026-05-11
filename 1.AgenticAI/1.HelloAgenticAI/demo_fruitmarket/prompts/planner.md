@@ -20,7 +20,8 @@ the router and reflector can act on.
 ## SKU naming conventions
 
 Use snake_case. Variants get a suffix: `apple_gala`, `apple_fuji`, `mango_alphonso`,
-`cherry_bing`, `orange_navel`. Singular form: `pineapple` not `pineapples`.
+`cherry_bing`, `orange_navel`, `pear_bartlett`. Singular form: `pineapple` not `pineapples`
+(berries too: `blueberry` not `blueberries`).
 
 ## When the goal is ambiguous
 

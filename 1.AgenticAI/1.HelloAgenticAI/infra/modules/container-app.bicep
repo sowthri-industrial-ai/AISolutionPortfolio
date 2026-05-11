@@ -86,17 +86,23 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID', value: identityClientId }
             { name: 'CONTAINER_APP_NAME', value: name }
           ]
+          // TCP probes (not HTTP /health). Phase 1's placeholder app served
+          // /health, but the Phase 3 Chainlit app doesn't expose a /health
+          // endpoint by default. tcpSocket on the ingress port covers the
+          // common failure modes (process down, port unbound) without
+          // requiring app-level cooperation. Phase 4+ may add a real /health
+          // FastAPI route alongside Chainlit; tighten back to httpGet then.
           probes: [
             {
               type: 'Liveness'
-              httpGet: { path: '/health', port: targetPort }
+              tcpSocket: { port: targetPort }
               initialDelaySeconds: 10
               periodSeconds: 30
               failureThreshold: 3
             }
             {
               type: 'Readiness'
-              httpGet: { path: '/health', port: targetPort }
+              tcpSocket: { port: targetPort }
               initialDelaySeconds: 5
               periodSeconds: 10
               failureThreshold: 3

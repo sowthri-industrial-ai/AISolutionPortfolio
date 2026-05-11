@@ -21,7 +21,8 @@
 docs/
 infra/
 tests/
-demo-fruitmarket/
+# (demo_fruitmarket/ is now a production package — included in the image
+# as an explicit COPY in demo_fruitmarket/Dockerfile.)
 README.md
 CLAUDE.md
 PROJECT_PLAN.md

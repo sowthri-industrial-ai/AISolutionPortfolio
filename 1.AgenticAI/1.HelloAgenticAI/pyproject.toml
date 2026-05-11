@@ -92,6 +92,15 @@ exclude = ["^\\.venv/", "^infra/", "^build/", "^dist/"]
 module = ["uvicorn", "uvicorn.*"]
 ignore_missing_imports = true
 
+# chainlit ships partial type info but not enough for `--strict`; every
+# `cl.Message().send()` call would trip `disallow_untyped_calls`. Treat
+# chainlit's symbols as Any (follow_imports = "skip") so the demo UI
+# passes `mypy --strict`. Same shape as the uvicorn override above.
+[[tool.mypy.overrides]]
+module = ["chainlit", "chainlit.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 testpaths = ["framework", "demo_fruitmarket", "tests"]
 python_files = ["test_*.py"]

@@ -52,14 +52,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN useradd --create-home --uid 1001 app
 WORKDIR /app
 
-# Copy the resolved venv from the builder.
-COPY --from=builder /app/.venv /app/.venv
+# Copy the resolved venv from the builder. --chown=app:app ensures the
+# non-root runtime user owns the file tree under /app — Chainlit's
+# import-time setup calls FILES_DIRECTORY.mkdir() (= /app/.files) and
+# without ownership the mkdir fails with PermissionError, crashing the
+# container at startup.
+COPY --chown=app:app --from=builder /app/.venv /app/.venv
 
 # Copy the two source packages. Both must be on PYTHONPATH (= /app) so
 # `from framework.* import ...` and `from demo_fruitmarket.* import ...`
 # resolve cleanly.
-COPY framework/ framework/
-COPY demo_fruitmarket/ demo_fruitmarket/
+COPY --chown=app:app framework/ framework/
+COPY --chown=app:app demo_fruitmarket/ demo_fruitmarket/
 
 USER app
 EXPOSE 8000

@@ -1,0 +1,438 @@
+openapi: 3.1.0
+info:
+  title: Refinery Digital Twin — REST
+  description: Read-only HTTP access to live + historical DWSIM snapshots from the
+    Stage 2 streamer. No DWSIM connection, no cloud — just the JSONL stream the streamer
+    writes to local disk.
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      tags:
+      - meta
+      summary: Healthz
+      operationId: healthz_healthz_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /snapshots/latest:
+    get:
+      tags:
+      - snapshots
+      summary: Snapshots Latest
+      operationId: snapshots_latest_snapshots_latest_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+  /snapshots/range:
+    get:
+      tags:
+      - snapshots
+      summary: Snapshots Range
+      operationId: snapshots_range_snapshots_range_get
+      parameters:
+      - name: since
+        in: query
+        required: true
+        schema:
+          type: string
+          description: ISO 8601 lower bound (inclusive)
+          title: Since
+        description: ISO 8601 lower bound (inclusive)
+      - name: until
+        in: query
+        required: true
+        schema:
+          type: string
+          description: ISO 8601 upper bound (inclusive)
+          title: Until
+        description: ISO 8601 upper bound (inclusive)
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 1
+          default: 1000
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RangeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /tags:
+    get:
+      tags:
+      - tags
+      summary: Tags
+      operationId: tags_tags_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TagEntry'
+                type: array
+                title: Response Tags Tags Get
+  /tags/{tag_id}:
+    get:
+      tags:
+      - tags
+      summary: Tags Get
+      operationId: tags_get_tags__tag_id__get
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tag Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagEntry'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /tags/{tag_id}/value:
+    get:
+      tags:
+      - tags
+      summary: Tags Value
+      operationId: tags_value_tags__tag_id__value_get
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tag Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagValueResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /tags/{tag_id}/history:
+    get:
+      tags:
+      - tags
+      summary: Tags History
+      operationId: tags_history_tags__tag_id__history_get
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tag Id
+      - name: since
+        in: query
+        required: true
+        schema:
+          type: string
+          description: ISO 8601 lower bound (inclusive)
+          title: Since
+        description: ISO 8601 lower bound (inclusive)
+      - name: until
+        in: query
+        required: true
+        schema:
+          type: string
+          description: ISO 8601 upper bound (inclusive)
+          title: Until
+        description: ISO 8601 upper bound (inclusive)
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 1
+          default: 1000
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+        stage2_active:
+          type: boolean
+          title: Stage2 Active
+        latest_cycle:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Cycle
+        active_file:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active File
+      type: object
+      required:
+      - status
+      - stage2_active
+      title: HealthResponse
+    RangeResponse:
+      properties:
+        count:
+          type: integer
+          title: Count
+        truncated:
+          type: boolean
+          title: Truncated
+        snapshots:
+          items:
+            $ref: '#/components/schemas/Snapshot'
+          type: array
+          title: Snapshots
+      type: object
+      required:
+      - count
+      - truncated
+      - snapshots
+      title: RangeResponse
+    Snapshot:
+      properties:
+        timestamp:
+          type: string
+          title: Timestamp
+        cycle:
+          type: integer
+          title: Cycle
+        solved:
+          type: boolean
+          title: Solved
+        solve_time_s:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Solve Time S
+        cycle_duration_s:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cycle Duration S
+        tag_count:
+          type: integer
+          title: Tag Count
+          default: 0
+        errors:
+          items:
+            type: string
+          type: array
+          title: Errors
+        tags:
+          additionalProperties: true
+          type: object
+          title: Tags
+        errors_truncated:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Errors Truncated
+        total_error_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total Error Count
+      type: object
+      required:
+      - timestamp
+      - cycle
+      - solved
+      title: Snapshot
+    TagEntry:
+      properties:
+        tag_id:
+          type: string
+          title: Tag Id
+        owner_tag:
+          type: string
+          title: Owner Tag
+        owner_type:
+          type: string
+          title: Owner Type
+        phase:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phase
+        property_key:
+          type: string
+          title: Property Key
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        unit_si:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Si
+        category:
+          type: string
+          title: Category
+        subsystem:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subsystem
+        property_package:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Property Package
+        static_composition:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Static Composition
+        composition_meaningful:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Composition Meaningful
+        current_value:
+          title: Current Value
+      type: object
+      required:
+      - tag_id
+      - owner_tag
+      - owner_type
+      - property_key
+      - category
+      title: TagEntry
+    TagHistoryPoint:
+      properties:
+        timestamp:
+          type: string
+          title: Timestamp
+        value:
+          title: Value
+      type: object
+      required:
+      - timestamp
+      title: TagHistoryPoint
+    TagHistoryResponse:
+      properties:
+        tag_id:
+          type: string
+          title: Tag Id
+        count:
+          type: integer
+          title: Count
+        points:
+          items:
+            $ref: '#/components/schemas/TagHistoryPoint'
+          type: array
+          title: Points
+      type: object
+      required:
+      - tag_id
+      - count
+      - points
+      title: TagHistoryResponse
+    TagValueResponse:
+      properties:
+        tag_id:
+          type: string
+          title: Tag Id
+        timestamp:
+          type: string
+          title: Timestamp
+        cycle:
+          type: integer
+          title: Cycle
+        value:
+          title: Value
+      type: object
+      required:
+      - tag_id
+      - timestamp
+      - cycle
+      title: TagValueResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

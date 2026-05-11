@@ -194,6 +194,32 @@ az containerapp revision list -n "$APP" -g "rg-helloagenticai-${ENV_NAME}" -o ta
 
 Most likely causes: image build pulled `framework/` incorrectly (PYTHONPATH issue), or the `uvicorn` entrypoint doesn't bind to `0.0.0.0`.
 
+**Wider lesson surfaced in Phase 3 (2026-05-11):** the original Phase 1 Bicep had the placeholder image hardcoded as a *default* in `container-app.bicep` (`param image string = 'mcr.microsoft.com/k8se/quickstart:latest'`) and never wired it through `main.bicep` as a parameter. That made the symptom above sound transient ("expected and self-resolves within the same `azd up` invocation") — but only because `azd up` runs `provision` then `deploy` in sequence. **Any subsequent solo `azd provision`** (e.g. to push a small Bicep-only change to env vars, IAM, or networking) silently reverts the Container App's image to the placeholder. The hardcoded default in the module is the design defect.
+
+The canonical azd idiom for image-bearing Container App Bicep is:
+
+1. Bicep module receives `image` as a required parameter (no default — the source of truth is the parameter substitution, not a stale local default).
+2. `main.bicep` declares a top-level `containerImage` parameter and passes it through.
+3. `main.parameters.json` substitutes the value: `"containerImage": { "value": "${SERVICE_AGENT_IMAGE_NAME=mcr.microsoft.com/k8se/quickstart:latest}" }`. azd populates `SERVICE_AGENT_IMAGE_NAME` after every `azd deploy`; the `=default` clause keeps the placeholder as the *only* fallback, used solely pre-first-deploy.
+
+After this wiring lands, `azd provision` and `azd deploy` are independent and idempotent: `provision` preserves the latest deployed image; `deploy` updates only the image. Risk #4's "expected transient" window is then bounded entirely to the very first `azd up` on a fresh subscription.
+
+Applied to HelloAgenticAI 2026-05-11 (commit on `phase-3-fruitmarket` alongside the AOAI/Cosmos env wiring). Any vertical project that copied Phase 1's Bicep before this date inherited the same defect — see the cross-lane note that should accompany this commit.
+
+### 8. Phase-zero placeholder containers should exercise the full credential-reach surface
+
+**Surfaced in:** Phase 3 deploy, when Chainlit tried to read `AZURE_OPENAI_ENDPOINT` and `AZURE_COSMOS_ENDPOINT` and found them unset.
+
+**Root cause:** Phase 1's `placeholder.py` only checked `CONTAINER_APP_NAME` / `CONTAINER_APP_REVISION`. The Bicep env block in `container-app.bicep` only set `AZURE_CLIENT_ID` + `CONTAINER_APP_NAME`. AOAI and Cosmos endpoints were declared as outputs in `main.bicep` but never threaded into the Container App module. The Dockerfile comment referred to env injection that didn't exist. Phase 1 looked green, but actually had a latent gap in the data-plane env wiring that only Phase 3's real application discovered.
+
+**Lesson for future projects:** A Phase-zero placeholder must do a one-shot credential-reach smoke test against every data-plane dependency the production app will use. For HelloAgenticAI, that means: at `/health`, the placeholder should attempt a token mint via `DefaultAzureCredential` for AOAI scope, attempt a token mint for Cosmos scope, and return both endpoints + success/fail booleans in the response body. If either is missing or the credential mint fails, `/health` returns 500. This catches env-wiring gaps and RBAC propagation issues during Phase 1 instead of Phase 3.
+
+**Migration note:** Apply this lesson to RefineryDigitalTwin Phase 1 before its Phase 3 lands — same Bicep-wiring class of bug can exist there.
+
+**Observation during the Phase 3 wiring fix:** `azd provision --preview` (run before applying the env-wiring fix, then re-run with the fix stashed for baseline comparison) revealed pre-existing drift from Phase 1's initial provision — Cosmos `enableAutomaticFailover=true` (ARM-default-at-deploy-time that Bicep never declared, now reverting to `false`), AOAI `currentCapacity` (server-managed output that Bicep doesn't track), Key Vault `networkAcls` (explicit default vs. implicit), Container Apps Environment customerId switching from literal to reference, App Insights `Flow_Type`/`Request_Source` auto-populated values being re-applied, ACR `dataEndpointEnabled`/`encryption` defaults. All functionally no-op for our single-region single-tenant setup, but a reminder that ARM what-if shows the Bicep-vs-deployed gap, not just intended changes. The two `--preview` runs were byte-identical except for duration — proving the drift was independent of the env-wiring commit. Future preflight reviews should distinguish "my intended change" from "pre-existing convergence noise" explicitly — and run preview against an unmodified Bicep baseline when in doubt.
+
+**Postscript — preview opacity at the property level (same session):** the env-wiring `azd provision` (between the env-wiring commit and the image-parameterization commit) reverted the Container App's image to the quickstart placeholder, because the Bicep module had the placeholder hardcoded as the parameter default (the design defect now captured in risk #4's "Wider lesson" paragraph). Crucially, the `--preview` summary did *not* surface this — it grouped both the env-block change and the image revert under one `* properties.template.containers` line. The baseline-vs-with-changes diff was byte-identical (except duration), giving false confidence that only the env vars would change. The image revert was caught **post-provision** via console logs (`Listening on :80...` instead of Chainlit on 8000), not in the preview. **Lesson:** when preview analysis is consequential, do not stop at the resource-level summary — drill into property-level state explicitly, e.g. `az containerapp show -n <name> -g <rg> --query "properties.template.containers[0].image" -o tsv` against the deployed resource, and reason about every property Bicep is going to assert (especially default-bearing ones). The preview's opaque grouping is a known azd limitation; defence is property-level inspection before provision, not after.
+
 ## Decision
 
 These seven risks are captured as this preflight runbook rather than mitigated in code. Specifically:

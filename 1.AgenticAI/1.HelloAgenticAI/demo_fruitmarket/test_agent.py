@@ -197,7 +197,7 @@ async def test_replan_pineapple_tropical_then_global_imports_terminates_clean() 
     reflect_after_attempt_2 = _ReflectorVerdictLLM(
         done=True,
         answer=(
-            "Got 1 pineapple from global_imports for $8.00. " "tropical_paradise was out of season."
+            "Got 1 pineapple from global_imports for $8.00. tropical_paradise was out of season."
         ),
         reasoning="Plan fulfilled after one replan.",
     )

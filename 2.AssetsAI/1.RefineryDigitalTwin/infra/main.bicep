@@ -102,11 +102,13 @@ module adxDatabase 'modules/adx_database.bicep' = {
   }
 }
 
-// Event Hub data connection — system-MI auth + dedicated consumer group
-// `adx-twin` + role assignment (Azure Event Hubs Data Receiver scoped to
-// the specific hub). On `az kusto cluster stop`, ingestion pauses; on
-// resume, picks up from consumer-group checkpoint. Event Hub Basic SKU has
-// 1-day retention — ADX stopped >24 h drops queued events.
+// Event Hub data connection — system-MI auth + $Default consumer group
+// (Event Hub Basic SKU doesn't allow custom consumer groups; Standard
+// upgrade would unlock that) + role assignment (Azure Event Hubs Data
+// Receiver scoped to the specific hub). On `az kusto cluster stop`,
+// ingestion pauses; on resume, picks up from consumer-group checkpoint.
+// Event Hub Basic SKU has 1-day retention — ADX stopped >24 h drops
+// queued events.
 module adxDataConnection 'modules/adx_data_connection.bicep' = {
   scope: rg
   name: 'adx-data-connection'

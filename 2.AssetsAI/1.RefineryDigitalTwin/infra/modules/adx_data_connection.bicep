@@ -2,8 +2,9 @@
 // table on the `twin_db` database. Authenticates via the cluster's system-
 // assigned managed identity:
 //
-//   1. Dedicated consumer group `adx-twin` on the existing hub (uses
-//      `existing` reference — eventhub.bicep stays untouched).
+//   1. Consumer group `$Default` on the existing hub. Event Hub Basic SKU
+//      doesn't allow custom consumer groups — only $Default. The Standard
+//      SKU upgrade ($22/mo) would unlock dedicated groups; out of scope.
 //   2. Role assignment: cluster's principalId → built-in
 //      "Azure Event Hubs Data Receiver" role, scoped to the specific hub
 //      (least privilege; not the whole namespace).
@@ -38,9 +39,6 @@ param clusterPrincipalId string
 @description('Azure region (cluster + hub location).')
 param location string
 
-@description('Consumer group name on the Event Hub.')
-param consumerGroupName string = 'adx-twin'
-
 @description('Data connection name.')
 param dataConnectionName string = 'dwsim-stream'
 
@@ -53,14 +51,6 @@ resource ehNs 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
 resource eh 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' existing = {
   parent: ehNs
   name: eventHubName
-}
-
-// Dedicated consumer group for ADX ingestion. Separate offset tracking from
-// any other consumer (e.g., a future twin-builder) so each subscriber has
-// its own checkpoint.
-resource cg 'Microsoft.EventHub/namespaces/eventhubs/consumergroups@2024-01-01' = {
-  parent: eh
-  name: consumerGroupName
 }
 
 // Built-in role: Azure Event Hubs Data Receiver
@@ -101,7 +91,10 @@ resource dataConnection 'Microsoft.Kusto/clusters/databases/dataConnections@2023
   kind: 'EventHub'
   properties: {
     eventHubResourceId: eh.id
-    consumerGroup: consumerGroupName
+    // Using $Default because Event Hub is Basic SKU (no custom consumer
+    // groups allowed). If we ever add other consumers, upgrade EH to
+    // Standard ($22/mo total) and create a dedicated group then.
+    consumerGroup: '$Default'
     tableName: 'snapshots'
     mappingRuleName: 'snapshots_mapping'
     dataFormat: 'MULTIJSON'
@@ -109,10 +102,9 @@ resource dataConnection 'Microsoft.Kusto/clusters/databases/dataConnections@2023
     managedIdentityResourceId: cluster.id
   }
   dependsOn: [
-    cg
     roleAssign
   ]
 }
 
 output dataConnectionName string = dataConnection.name
-output consumerGroupName string = cg.name
+output consumerGroupName string = '$Default'

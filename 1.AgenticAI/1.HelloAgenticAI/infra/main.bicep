@@ -38,6 +38,10 @@ param openAiChatMiniCapacity int = 30
 @description('Capacity for the text-embedding-3-large deployment (in 1K TPM units).')
 param openAiEmbeddingsCapacity int = 30
 
+@minLength(1)
+@description('Container image for the agent. Sourced from SERVICE_AGENT_IMAGE_NAME (an azd output populated after every `azd deploy`) via main.parameters.json substitution; falls back to the quickstart placeholder pre-first-deploy. Plumbing this through Bicep avoids the trap where a hardcoded default in the container-app module silently reverts the image to the placeholder on any solo `azd provision`.')
+param containerImage string
+
 // ----- derived -----
 
 var tags = {
@@ -185,6 +189,9 @@ module containerApp 'modules/container-app.bicep' = {
     identityResourceId: identity.outputs.id
     identityClientId: identity.outputs.clientId
     registryServer: registry.outputs.loginServer
+    openAiEndpoint: openai.outputs.endpoint
+    cosmosEndpoint: cosmos.outputs.endpoint
+    image: containerImage
   }
 }
 

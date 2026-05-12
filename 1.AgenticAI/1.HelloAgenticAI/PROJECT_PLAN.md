@@ -32,7 +32,7 @@ A LangGraph agent (`Plan → Route → Reflect → Terminate`) runs in Azure Con
 │   ├── guardrails/
 │   ├── llm/
 │   └── eval/
-├── demo-fruitmarket/                v1 demo vertical (the swap-out layer)
+├── demo_fruitmarket/                v1 demo vertical (the swap-out layer)
 │   ├── tools/                       mock shop MCP servers
 │   ├── prompts/
 │   ├── graph.py                     LangGraph composition
@@ -101,15 +101,15 @@ A LangGraph agent (`Plan → Route → Reflect → Terminate`) runs in Azure Con
 **Goal:** The user-facing demo. Chainlit UI streams the live agent flow against 5–10 mock fruit shops. Out-of-stock replanning visibly works.
 
 **Deliverables:**
-- `demo-fruitmarket/tools/` — 5–10 mock shop MCP servers (each implements `MCPToolBase`; some hold inventory, some are out-of-stock by default to force replans)
-- `demo-fruitmarket/prompts/` — planner, router, reflector, terminator prompts as `.md` files loaded at runtime
-- `demo-fruitmarket/graph.py` — full LangGraph composition wiring framework nodes to demo tools
-- `demo-fruitmarket/ui/app.py` — Chainlit app. Each `AgentEventEmitter` event renders as a step in the UI with collapsible details (tool input/output, reasoning).
-- `demo-fruitmarket/Dockerfile`
+- `demo_fruitmarket/tools/` — 5–10 mock shop MCP servers (each implements `MCPToolBase`; some hold inventory, some are out-of-stock by default to force replans)
+- `demo_fruitmarket/prompts/` — planner, router, reflector, terminator prompts as `.md` files loaded at runtime
+- `demo_fruitmarket/graph.py` — full LangGraph composition wiring framework nodes to demo tools
+- `demo_fruitmarket/ui/app.py` — Chainlit app. Each `AgentEventEmitter` event renders as a step in the UI with collapsible details (tool input/output, reasoning).
+- `demo_fruitmarket/Dockerfile`
 - 3–5 hand-crafted demo prompts in the README ("buy a tropical fruit basket under $20", "find pomegranates and dates, prefer local", etc.)
 
 **Acceptance criteria:**
-- `uv run chainlit run demo-fruitmarket/ui/app.py` starts UI; user submits goal, watches every step stream
+- `uv run chainlit run demo_fruitmarket/ui/app.py` starts UI; user submits goal, watches every step stream
 - The canonical replanning demo runs cleanly: a shop returns out-of-stock, the agent visibly replans, finds an alternate shop, completes the basket
 - Each step in the UI shows: name, status, duration, expandable input/output JSON
 - Container builds via `docker build` locally
@@ -138,7 +138,7 @@ A LangGraph agent (`Plan → Route → Reflect → Terminate`) runs in Azure Con
 **Goal:** Quality gates run automatically on every PR. Demo is launchable from a public portfolio website.
 
 **Deliverables:**
-- `demo-fruitmarket/eval/cases.json` — 8–10 eval cases across happy path, replanning, human escape, guardrail block, multi-step planning
+- `demo_fruitmarket/eval/cases.json` — 8–10 eval cases across happy path, replanning, human escape, guardrail block, multi-step planning
 - `.github/workflows/evals.yml` — runs evals on every PR; comments results on the PR; fails the PR if pass rate <90%
 - `.github/workflows/deploy.yml` — `provision`, `deploy`, `teardown` modes via `workflow_dispatch`
 - OIDC federated credentials configured (zero secrets in GitHub) — Claude Code documents the manual Entra app-registration steps in `docs/setup-oidc.md`
@@ -160,7 +160,7 @@ A LangGraph agent (`Plan → Route → Reflect → Terminate`) runs in Azure Con
 - README and `docs/ARCHITECTURE.md` complete with screenshots, GIF, mermaid diagrams
 - Demo runs end-to-end via the portfolio site Launch button
 - One reviewer who has never seen the project can run the demo without help
-- The project is at a state where Project #2 (refinery vertical) can be started by copying the repo structure and swapping only `demo-fruitmarket/` with the refinery use case
+- The project is at a state where Project #2 (refinery vertical) can be started by copying the repo structure and swapping only `demo_fruitmarket/` with the refinery use case
 
 ## Explicitly NOT in v1 (intentional scope cuts)
 

@@ -7,6 +7,7 @@
     "deploySearch": { "value": false },
     "openAiChatLargeCapacity": { "value": 10 },
     "openAiChatMiniCapacity": { "value": 30 },
-    "openAiEmbeddingsCapacity": { "value": 30 }
+    "openAiEmbeddingsCapacity": { "value": 30 },
+    "containerImage": { "value": "${SERVICE_AGENT_IMAGE_NAME=mcr.microsoft.com/k8se/quickstart:latest}" }
   }
 }

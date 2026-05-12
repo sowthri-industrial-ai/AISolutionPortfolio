@@ -22,9 +22,10 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Chainlit runtime
+# Chainlit runtime + auto-generated welcome page
 .chainlit/
 .files/
+chainlit.md
 
 # Bicep build outputs
 *.json.bicep.tmp

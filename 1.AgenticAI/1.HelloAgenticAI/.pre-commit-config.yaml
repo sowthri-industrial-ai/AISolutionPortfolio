@@ -35,10 +35,10 @@ repos:
       # Avoids the additional_dependencies maintenance treadmill.
       - id: mypy
         name: mypy --strict (project venv via uv)
-        entry: uv --directory 1.AgenticAI/1.HelloAgenticAI run mypy --strict framework/
+        entry: uv --directory 1.AgenticAI/1.HelloAgenticAI run mypy --strict framework/ demo_fruitmarket/
         language: system
         pass_filenames: false
-        files: ^1\.AgenticAI/1\.HelloAgenticAI/framework/.*\.py$
+        files: ^1\.AgenticAI/1\.HelloAgenticAI/(framework|demo_fruitmarket)/.*\.py$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2

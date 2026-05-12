@@ -27,8 +27,14 @@ param identityClientId string
 @description('ACR login server (e.g. "<name>.azurecr.io"). The pull credential is the managed identity.')
 param registryServer string
 
-@description('Initial image. azd deploy replaces this with the locally-built placeholder image.')
-param image string = 'mcr.microsoft.com/k8se/quickstart:latest'
+@description('AOAI endpoint (https://<name>.openai.azure.com/) — injected as AZURE_OPENAI_ENDPOINT for DefaultAzureCredential-based clients.')
+param openAiEndpoint string
+
+@description('Cosmos endpoint (https://<name>.documents.azure.com:443/) — injected as AZURE_COSMOS_ENDPOINT for DefaultAzureCredential-based clients.')
+param cosmosEndpoint string
+
+@description('Container image, supplied from main.bicep (sourced from SERVICE_AGENT_IMAGE_NAME via main.parameters.json on every provision, falling back to the quickstart placeholder pre-first-deploy). NOT defaulted here — the source of truth is the parameter substitution, not a stale local default. A local default here would silently mask a missing azd output and revert the image to the placeholder on any solo `azd provision` (the bug that landed Phase 3 momentarily on the wrong binary; see ADR-0003 risk #4).')
+param image string
 
 @minValue(1)
 @maxValue(65535)
@@ -85,18 +91,26 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'AZURE_CLIENT_ID', value: identityClientId }
             { name: 'CONTAINER_APP_NAME', value: name }
+            { name: 'AZURE_OPENAI_ENDPOINT', value: openAiEndpoint }
+            { name: 'AZURE_COSMOS_ENDPOINT', value: cosmosEndpoint }
           ]
+          // TCP probes (not HTTP /health). Phase 1's placeholder app served
+          // /health, but the Phase 3 Chainlit app doesn't expose a /health
+          // endpoint by default. tcpSocket on the ingress port covers the
+          // common failure modes (process down, port unbound) without
+          // requiring app-level cooperation. Phase 4+ may add a real /health
+          // FastAPI route alongside Chainlit; tighten back to httpGet then.
           probes: [
             {
               type: 'Liveness'
-              httpGet: { path: '/health', port: targetPort }
+              tcpSocket: { port: targetPort }
               initialDelaySeconds: 10
               periodSeconds: 30
               failureThreshold: 3
             }
             {
               type: 'Readiness'
-              httpGet: { path: '/health', port: targetPort }
+              tcpSocket: { port: targetPort }
               initialDelaySeconds: 5
               periodSeconds: 10
               failureThreshold: 3

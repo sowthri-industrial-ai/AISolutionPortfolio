@@ -27,6 +27,8 @@ from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from framework.guardrails.schema import SchemaValidationError
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -136,11 +138,20 @@ class AzureOpenAIClient:
     ) -> T:
         """Chat completion with Pydantic-validated structured output.
 
-        Uses OpenAI's structured-outputs (``response_format=<Model>``) API.
-        Retries up to ``max_retries`` extra times if the model returns
-        ``parsed=None`` (rare but possible for ambiguous schemas).
+        Uses OpenAI's structured-outputs (``response_format=<Model>``) API,
+        which forces the model to return JSON matching the schema at the
+        SDK level — the only way validation fails here is if the SDK
+        itself can't deserialise, in which case ``parsed`` is ``None``.
+
+        Retries up to ``max_retries`` extra times on ``parsed=None`` (rare
+        but possible for ambiguous schemas). Phase 4: raises
+        :class:`SchemaValidationError` (not ``RuntimeError``) after
+        retries exhaust, so the :class:`framework.agents.base.AgentBase`
+        retry/emit helper can catch it uniformly with tool-input
+        ``ValidationError``\\s and emit
+        :attr:`AgentEventType.SCHEMA_VALIDATION_FAILED`. Callers that
+        catch the legacy ``RuntimeError`` need to update.
         """
-        last_error: Exception | None = None
         for _attempt in range(max_retries + 1):
             resp = await self._client.chat.completions.parse(
                 model=deployment or self._chat_large_deployment,
@@ -151,10 +162,10 @@ class AzureOpenAIClient:
             parsed = resp.choices[0].message.parsed
             if parsed is not None:
                 return parsed
-            last_error = RuntimeError(
-                f"AOAI structured response had parsed=None for {response_model.__name__}"
-            )
-        raise last_error or RuntimeError("chat_structured exhausted retries")
+        raise SchemaValidationError(
+            response_model,
+            reason=(f"AOAI structured response had parsed=None after {max_retries + 1} attempt(s)"),
+        )
 
     async def embed(self, text: str | Sequence[str]) -> list[list[float]]:
         """Generate embeddings — returns one vector per input."""

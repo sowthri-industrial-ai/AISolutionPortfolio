@@ -36,12 +36,39 @@ logger = logging.getLogger(__name__)
 
 
 class AgentEventType(StrEnum):
-    """Canonical event taxonomy for an agent run.
+    """Canonical agent-loop event types, emitted via :class:`AgentEventEmitter`.
 
-    These six are the minimum surface every vertical project's runs must
-    emit. Phase 4 will add ``GUARDRAIL_BLOCK``,
-    ``SCHEMA_VALIDATION_FAILURE``, ``LLM_CALL_START``,
-    ``LLM_CALL_COMPLETE``, ``ROUTE``.
+    **Contract.**
+
+    * **The Phase 2 canonical six** — ``PLAN_START``, ``PLAN_COMPLETE``,
+      ``TOOL_CALL``, ``TOOL_RESULT``, ``REFLECT``, ``COMPLETE`` — are
+      required and stable. Every vertical project's agent runs must emit
+      all six on a happy-path execution. Removing or renaming any of
+      these is a breaking change to the framework.
+
+    * **Additional event types may be added in future phases.** Phase 4
+      adds ``SCHEMA_VALIDATION_FAILED`` (emitted on each retry attempt
+      when a structured LLM output or tool-input payload fails Pydantic
+      validation — 3 attempts total per node per PROJECT_PLAN; the 3rd
+      failure also propagates as a typed exception, so a run that
+      exhausts retries produces three events plus an error). Phase 4
+      will also add ``GUARDRAIL_BLOCKED`` (Content Safety input/output
+      gates). Future phases may add ``LLM_CALL_START`` /
+      ``LLM_CALL_COMPLETE`` / ``ROUTE``. Sinks and tests should treat
+      the canonical six as a **subset** of the live enum, not equal to
+      it.
+
+    * **``*_START`` events must have a matching ``*_COMPLETE`` event in
+      normal control flow.** Emit ``*_START`` only when the operation is
+      committed to running, not while still evaluating whether to run
+      it. This is a Phase 4 design principle adopted after ``TOOL_CALL``
+      was tightened to fire only AFTER the route + tool-input-validation
+      retry block succeeds — guarantees the trace produces strict pairs
+      that downstream consumers (Langfuse span pairing, UI step
+      rendering, latency-pair calculation in App Insights workbook) can
+      rely on. The principle generalises to event types we haven't
+      built yet (e.g. an ``LLM_CALL_START`` must only fire when the
+      bound LLM call is about to be issued).
     """
 
     PLAN_START = "plan_start"
@@ -50,6 +77,7 @@ class AgentEventType(StrEnum):
     TOOL_RESULT = "tool_result"
     REFLECT = "reflect"
     COMPLETE = "complete"
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
 
 
 class AgentEvent(BaseModel):

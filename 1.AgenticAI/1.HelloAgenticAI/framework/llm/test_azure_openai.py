@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
+from framework.guardrails.schema import SchemaValidationError
 from framework.llm.azure_openai import AzureOpenAIClient
 
 # ---------- helpers ----------
@@ -192,16 +193,22 @@ async def test_chat_structured_retries_on_none_then_succeeds(
     assert mock_client.chat.completions.parse.await_count == 2
 
 
-async def test_chat_structured_raises_after_retries_exhausted(
+async def test_chat_structured_raises_schema_validation_error_after_retries_exhausted(
     wrapper: AzureOpenAIClient, mock_client: MagicMock
 ) -> None:
+    """Phase 4: ``chat_structured`` raises ``SchemaValidationError`` (not
+    ``RuntimeError``) so the agent retry/emit helper catches it uniformly
+    with tool-input ``ValidationError``."""
     mock_client.chat.completions.parse.return_value = _make_parse_response(None)
-    with pytest.raises(RuntimeError, match="parsed=None"):
+    with pytest.raises(SchemaValidationError) as excinfo:
         await wrapper.chat_structured(
             [{"role": "user", "content": "plan"}],
             response_model=_Plan,
             max_retries=2,
         )
+    assert excinfo.value.model is _Plan
+    assert excinfo.value.cause is None  # reason-only construction
+    assert "parsed=None" in (excinfo.value.reason or "")
     # initial + 2 retries = 3 total calls
     assert mock_client.chat.completions.parse.await_count == 3
 

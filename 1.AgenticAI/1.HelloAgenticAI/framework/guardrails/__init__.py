@@ -1,4 +1,4 @@
-"""Guardrails layer — Content Safety client + Pydantic schema validator."""
+"""Guardrails layer — Content Safety client (input/output gates) + Pydantic schema gate."""
 
 from framework.guardrails.content_safety import (
     CategoryAnalysis,
@@ -6,8 +6,10 @@ from framework.guardrails.content_safety import (
     ContentSafetyResult,
     ContentSafetyVerdict,
     HarmCategory,
-    SchemaValidationError,
     Severity,
+)
+from framework.guardrails.schema import (
+    SchemaValidationError,
     validate_schema,
 )
 

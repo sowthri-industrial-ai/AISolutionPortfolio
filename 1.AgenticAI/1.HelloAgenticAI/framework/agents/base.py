@@ -31,12 +31,14 @@ import logging
 import operator
 import time
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, TypedDict
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import Annotated, Any, TypedDict, TypeVar
 from uuid import uuid4
 
 from langgraph.graph import END, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
+from framework.guardrails.schema import SchemaValidationError
 from framework.observability.events import (
     AgentEvent,
     AgentEventEmitter,
@@ -45,6 +47,8 @@ from framework.observability.events import (
 from framework.tools.base import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 # ---------- shared contract types ----------
@@ -189,7 +193,15 @@ class AgentBase(ABC):
         goal = state["goal"]
         await self._emit(sid, AgentEventType.PLAN_START, payload={"goal": goal})
         started = time.monotonic()
-        plan = await self._plan(goal)
+        # Schema gate (Phase 4): _plan typically calls chat_structured
+        # which raises SchemaValidationError on parsed=None. Retry up to
+        # 2x — same prompt, same temperature, fresh LLM dice — before
+        # propagating. PROJECT_PLAN Phase 4 criterion.
+        plan = await self._invoke_with_validation_retry(
+            lambda: self._plan(goal),
+            session_id=sid,
+            node="plan",
+        )
         duration_ms = int((time.monotonic() - started) * 1000)
         await self._emit(
             sid,
@@ -202,8 +214,33 @@ class AgentBase(ABC):
     async def _tool_node(self, state: AgentState) -> dict[str, Any]:
         sid = state["session_id"]
         history = _coerce_history(state.get("history", []))
-        decision = await self._route(state.get("plan"), history)
+
+        # Schema gate (Phase 4): two failure modes covered by one retry
+        # loop:
+        # (1) `_route` calls chat_structured → SchemaValidationError if
+        #     the LLM SDK can't produce a valid ToolDecision.
+        # (2) `tool.input_schema.model_validate(decision.args)` → raw
+        #     pydantic ValidationError if the LLM picked a real tool but
+        #     gave args that don't fit its schema.
+        # Both are LLM-output problems; the right response is to re-route
+        # (re-prompt the planner/router), not to re-validate the same
+        # args.
+        async def _route_and_validate() -> tuple[Any, BaseModel]:
+            decision_ = await self._route(state.get("plan"), history)
+            tool_ = self._tools.get(decision_.tool_name)
+            payload_ = tool_.input_schema.model_validate(decision_.args)
+            return decision_, payload_
+
+        decision, payload = await self._invoke_with_validation_retry(
+            _route_and_validate,
+            session_id=sid,
+            node="route",
+        )
         tool = self._tools.get(decision.tool_name)
+
+        # TOOL_CALL emits only after the route+validate retry succeeds,
+        # so the UI/trace never shows an orphan TOOL_CALL whose
+        # tool.call() was never reached.
         await self._emit(
             sid,
             AgentEventType.TOOL_CALL,
@@ -214,7 +251,6 @@ class AgentBase(ABC):
             },
         )
         started = time.monotonic()
-        payload = tool.input_schema.model_validate(decision.args)
         result = await tool.call(payload)
         duration_ms = int((time.monotonic() - started) * 1000)
         result_payload = (
@@ -245,7 +281,14 @@ class AgentBase(ABC):
         sid = state["session_id"]
         history = _coerce_history(state.get("history", []))
         started = time.monotonic()
-        decision = await self._reflect(history)
+        # Schema gate (Phase 4): same retry treatment as plan/route — if
+        # the reflector's chat_structured can't produce a valid
+        # ReflectionDecision, try twice more before propagating.
+        decision = await self._invoke_with_validation_retry(
+            lambda: self._reflect(history),
+            session_id=sid,
+            node="reflect",
+        )
         duration_ms = int((time.monotonic() - started) * 1000)
         await self._emit(
             sid,
@@ -305,8 +348,107 @@ class AgentBase(ABC):
             )
         )
 
+    async def _invoke_with_validation_retry(
+        self,
+        operation: Callable[[], Awaitable[T]],
+        *,
+        session_id: str,
+        node: str,
+        max_retries: int = 2,
+    ) -> T:
+        """Run ``operation`` with retry-on-validation-failure semantics.
+
+        On each :class:`SchemaValidationError` or :class:`ValidationError`
+        from ``operation()``, emits an
+        :attr:`AgentEventType.SCHEMA_VALIDATION_FAILED` event carrying the
+        offending Pydantic model name, the attempt index, the budget, and
+        a truncated error detail. Re-invokes ``operation`` up to
+        ``max_retries`` more times; on the final failure, the exception
+        propagates to the LangGraph loop (where Chainlit's error sink
+        renders it as a failed step).
+
+        PROJECT_PLAN Phase 4 criterion: "Pydantic schema validation
+        enforced on every node's structured output (refuses malformed
+        LLM outputs and retries up to 2x)." 3 attempts total at
+        ``max_retries=2``; 3rd failure propagates.
+
+        ``node`` is the agent-graph node label for the event ("plan" /
+        "route" / "reflect") — distinct from the tool name (which would
+        only be known after a successful route, and we may never get
+        there).
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                return await operation()
+            except (SchemaValidationError, ValidationError) as exc:
+                model_name, errors = _extract_validation_detail(exc)
+                await self._emit(
+                    session_id,
+                    AgentEventType.SCHEMA_VALIDATION_FAILED,
+                    node=node,
+                    payload={
+                        "model": model_name,
+                        "attempt": attempt + 1,
+                        "max_retries": max_retries,
+                        "errors": errors,
+                    },
+                )
+                if attempt >= max_retries:
+                    raise
+        # Unreachable — every loop iteration either returns or raises.
+        raise AssertionError("unreachable")
+
 
 # ---------- module-level helpers ----------
+
+
+_MAX_VALIDATION_ERRORS_IN_EVENT = 3
+"""How many Pydantic errors to include in a SCHEMA_VALIDATION_FAILED payload.
+
+Real ValidationErrors on a deeply-nested model can balloon to dozens of
+entries; trimming keeps the event small enough for Cosmos / App Insights
+without losing the leading signal. The full exception still propagates if
+retries exhaust — observability is the consolation prize, not the audit
+trail."""
+
+
+def _extract_validation_detail(
+    exc: SchemaValidationError | ValidationError,
+) -> tuple[str, list[Mapping[str, Any]] | str]:
+    """Extract ``(model_name, error_detail)`` for the event payload.
+
+    ``SchemaValidationError`` carries the model class directly + either a
+    wrapped Pydantic ``ValidationError`` (use ``.errors()``) or a free-
+    form ``reason`` string (use that as the detail). Raw ``ValidationError``
+    has ``.title`` and ``.errors()``.
+
+    The returned ``error_detail`` is either a list of Pydantic-error dicts
+    (capped at :data:`_MAX_VALIDATION_ERRORS_IN_EVENT`) or a single string
+    — both are JSON-serialisable for the event payload.
+    """
+    if isinstance(exc, SchemaValidationError):
+        model_name = exc.model.__name__
+        if exc.cause is not None:
+            return model_name, _truncate_errors(exc.cause.errors())
+        # reason-only construction (e.g. chat_structured parsed=None)
+        return model_name, exc.reason or "no detail"
+    # raw pydantic ValidationError — happens at the tool input gate
+    model_name = exc.title or "<unknown>"
+    return model_name, _truncate_errors(exc.errors())
+
+
+def _truncate_errors(errors: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Cap a Pydantic ``.errors()`` list at the event-payload budget.
+
+    Accepts the wider :class:`Sequence[Mapping]` so pydantic's typed
+    :class:`pydantic_core.ErrorDetails` (a ``TypedDict``) and plain
+    :class:`dict` test fixtures both pass.
+    """
+    if len(errors) <= _MAX_VALIDATION_ERRORS_IN_EVENT:
+        return list(errors)
+    head = list(errors[:_MAX_VALIDATION_ERRORS_IN_EVENT])
+    tail_count = len(errors) - _MAX_VALIDATION_ERRORS_IN_EVENT
+    return [*head, {"type": "_truncated", "msg": f"+{tail_count} more error(s) omitted"}]
 
 
 def _coerce_history(raw: list[dict[str, Any]]) -> list[HistoryEntry]:

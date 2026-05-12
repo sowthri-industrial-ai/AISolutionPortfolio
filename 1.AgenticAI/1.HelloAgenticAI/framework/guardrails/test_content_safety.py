@@ -1,11 +1,15 @@
-"""Unit tests for the guardrails layer (Content Safety + schema validation)."""
+"""Unit tests for the Content Safety client (input + output gates).
+
+Schema-gate tests (``validate_schema`` / ``SchemaValidationError``) live
+in :mod:`framework.guardrails.test_schema` — separate module, separate
+concern.
+"""
 
 from __future__ import annotations
 
 import logging
 
 import pytest
-from pydantic import BaseModel, Field
 
 from framework.guardrails.content_safety import (
     CategoryAnalysis,
@@ -13,9 +17,7 @@ from framework.guardrails.content_safety import (
     ContentSafetyResult,
     ContentSafetyVerdict,
     HarmCategory,
-    SchemaValidationError,
     Severity,
-    validate_schema,
 )
 
 # ---------- Severity / HarmCategory enums ----------
@@ -75,54 +77,6 @@ def test_result_high_severity_is_blocked() -> None:
     )
     assert r.is_blocked() is True
     assert r.blocking_categories() == [HarmCategory.SEXUAL]
-
-
-# ---------- validate_schema ----------
-
-
-class _Plan(BaseModel):
-    goal: str = Field(min_length=1)
-    steps: list[str]
-
-
-def test_validate_schema_accepts_dict_payload() -> None:
-    out = validate_schema({"goal": "buy fruit", "steps": ["a", "b"]}, _Plan)
-    assert isinstance(out, _Plan)
-    assert out.goal == "buy fruit"
-    assert out.steps == ["a", "b"]
-
-
-def test_validate_schema_accepts_json_string() -> None:
-    out = validate_schema('{"goal": "g", "steps": ["x"]}', _Plan)
-    assert out.goal == "g"
-    assert out.steps == ["x"]
-
-
-def test_validate_schema_raises_on_missing_field() -> None:
-    with pytest.raises(SchemaValidationError) as excinfo:
-        validate_schema({"steps": ["a"]}, _Plan)
-    assert excinfo.value.model is _Plan
-    assert "goal" in str(excinfo.value)
-
-
-def test_validate_schema_raises_on_invalid_field_value() -> None:
-    with pytest.raises(SchemaValidationError):
-        validate_schema({"goal": "", "steps": ["a"]}, _Plan)
-
-
-def test_validate_schema_raises_on_malformed_json() -> None:
-    with pytest.raises(SchemaValidationError):
-        validate_schema("not json", _Plan)
-
-
-def test_schema_validation_error_preserves_cause() -> None:
-    try:
-        validate_schema({"goal": "g"}, _Plan)  # missing steps
-    except SchemaValidationError as exc:
-        assert exc.cause is not None
-        assert exc.model is _Plan
-    else:
-        pytest.fail("expected SchemaValidationError")
 
 
 # ---------- ContentSafetyClient (stub) ----------

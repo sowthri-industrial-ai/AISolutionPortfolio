@@ -22,9 +22,13 @@ from framework.observability.events import (
 # ---------- AgentEventType ----------
 
 
-def test_agent_event_type_has_six_canonical_values() -> None:
-    """The six minimum events agreed for Phase 2."""
-    expected = {
+def test_agent_event_type_includes_phase_2_canonical_six() -> None:
+    """The six minimum events agreed for Phase 2 remain present as
+    Phase 4 (and later) adds more types. This is a *subset* check, not
+    an equality check — Phase 4's ``SCHEMA_VALIDATION_FAILED`` and
+    follow-ons (``GUARDRAIL_BLOCKED`` etc.) are expected additions, not
+    failures."""
+    phase_2_canonical = {
         "plan_start",
         "plan_complete",
         "tool_call",
@@ -32,7 +36,17 @@ def test_agent_event_type_has_six_canonical_values() -> None:
         "reflect",
         "complete",
     }
-    assert {t.value for t in AgentEventType} == expected
+    actual = {t.value for t in AgentEventType}
+    assert (
+        phase_2_canonical <= actual
+    ), f"Phase 2 canonical events missing from enum: {phase_2_canonical - actual}"
+
+
+def test_agent_event_type_includes_phase_4_schema_validation_failed() -> None:
+    """Phase 4 deliverable 1 — explicit assertion that the new event type
+    is wired into the enum (and not accidentally removed by a future
+    refactor)."""
+    assert AgentEventType.SCHEMA_VALIDATION_FAILED.value == "schema_validation_failed"
 
 
 def test_agent_event_type_is_string_enum() -> None:

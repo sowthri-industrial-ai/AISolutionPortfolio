@@ -1,19 +1,17 @@
-"""Guardrail layer — Content Safety client + Pydantic schema validator.
+"""Content Safety client — input and output text-analysis gates.
 
-Per ``docs/ARCHITECTURE.md`` §3, the agent runs three guardrail gates:
+Per ``docs/ARCHITECTURE.md`` §3, the agent runs three guardrail gates;
+this module owns the **input gate** (user goal at agent entry) and the
+**output gate** (final answer before it reaches the user). The third
+gate — Pydantic schema validation on structured LLM/tool I/O — lives
+in :mod:`framework.guardrails.schema` (different concern, different
+failure mode, different SDK dependency).
 
-1. **Input gate** — :class:`ContentSafetyClient.check_text` on user input,
-   before the planner sees it.
-2. **Schema gate** — :func:`validate_schema` on every structured LLM output,
-   between the LLM and the next node.
-3. **Output gate** — :class:`ContentSafetyClient.check_text` on the final
-   answer, before it reaches the user.
-
-Phase 2 ships the API surface and the real schema validator. The Content
-Safety client is a STUB that always returns ALLOW so Phase 2 integration
-tests run without touching the real REST API. Phase 4 swaps in the real
+Phase 2 ships the API surface only. The Content Safety client is a
+STUB that always returns ALLOW so Phase 2 integration tests run without
+touching the real REST API. Phase 4 swaps in the real
 ``POST /contentsafety/text:analyze`` call (along with the
-``GUARDRAIL_BLOCK`` event type that fires when the verdict is BLOCK).
+``GUARDRAIL_BLOCKED`` event type that fires when the verdict is BLOCK).
 
 The stub deliberately does NOT silently mask failures — it logs a clear
 warning every time it is called so it's obvious in test output that the
@@ -25,7 +23,7 @@ from __future__ import annotations
 import logging
 from enum import IntEnum, StrEnum
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -78,35 +76,6 @@ class ContentSafetyResult(BaseModel):
         return (
             ContentSafetyVerdict.BLOCK if self.is_blocked(threshold) else ContentSafetyVerdict.ALLOW
         )
-
-
-class SchemaValidationError(Exception):
-    """Raised when a structured LLM output fails Pydantic validation.
-
-    Wraps the underlying :class:`ValidationError` so the agent layer can
-    surface a single error class via the schema gate, mapping cleanly to
-    the Phase 4 ``SCHEMA_VALIDATION_FAILURE`` event type.
-    """
-
-    def __init__(self, model: type[BaseModel], cause: ValidationError) -> None:
-        self.model = model
-        self.cause = cause
-        super().__init__(f"schema validation failed for {model.__name__}: {cause}")
-
-
-def validate_schema[T: BaseModel](payload: object, model: type[T]) -> T:
-    """Validate ``payload`` against ``model``.
-
-    Accepts either an already-decoded object (dict, list, scalar) or a JSON
-    string. Raises :class:`SchemaValidationError` on failure so the agent
-    layer can react with a retry or a ``SCHEMA_VALIDATION_FAILURE`` event.
-    """
-    try:
-        if isinstance(payload, str):
-            return model.model_validate_json(payload)
-        return model.model_validate(payload)
-    except ValidationError as exc:
-        raise SchemaValidationError(model, exc) from exc
 
 
 class ContentSafetyClient:

@@ -1,0 +1,98 @@
+{
+  "version": "0.1.0",
+  "description": "Refinery Digital Twin — entity type definitions. Each type has a description, a list of static properties (set once in refinery_instance.json), and a list of allowed relationship types. Dynamic properties (live values per snapshot) are discoverable via tag_mapping.json (filter where entity_id == X). The 9 first-class types plus the nested Stage type cover all 23 Phase 0a sim objects plus the 3 ontology aggregator entities (Refinery + 2 Subsystems).",
+  "relationships": {
+    "CONTAINS": "Aggregation: parent entity contains child (Refinery contains Subsystems; Subsystems contain unit ops and streams).",
+    "RECEIVES_FEED_FROM": "Column receives a material feed stream (column-specific).",
+    "PRODUCES": "Column or equipment emits a product stream.",
+    "CONSUMES_DUTY": "Unit op consumes energy (heat in) — points to an EnergyStream.",
+    "REJECTS_DUTY": "Unit op rejects energy (heat out) — points to an EnergyStream.",
+    "FROM": "Stream's source unit op (every MaterialStream / EnergyStream has at most one FROM).",
+    "TO": "Stream's destination unit op (every MaterialStream / EnergyStream has at most one TO).",
+    "RECEIVES_FROM": "Equipment receives material from an upstream MaterialStream.",
+    "DISCHARGES_TO": "Equipment discharges material to a downstream MaterialStream.",
+    "CLOSES_LOOP": "Recycle block annotates a closed loop's tear stream (input side).",
+    "REOPENS_LOOP": "Recycle block's output side — same physical stream as CLOSES_LOOP target after convergence.",
+    "LHS": "Constraint left-hand side reference (computed from RHS via the rule).",
+    "RHS": "Constraint right-hand side reference (independent variable in the constraint).",
+    "CONSTRAINED_BY": "Reverse pointer: an entity is the target of one or more Constraint entities."
+  },
+  "entity_types": {
+    "Refinery": {
+      "description": "Top-level container — the entire flowsheet. Ontology aggregator, no DWSIM counterpart.",
+      "properties": ["name", "substrate_file", "property_packages"],
+      "allowed_relationships": ["CONTAINS"]
+    },
+    "Subsystem": {
+      "description": "Logical grouping by property package. PetroleumSide (Peng-Robinson) and ThermalOilLoop (CoolProp Incompressible). Ontology aggregator, no DWSIM counterpart.",
+      "properties": ["name", "property_package", "description"],
+      "allowed_relationships": ["CONTAINS"]
+    },
+    "Column": {
+      "description": "Distillation column with multiple theoretical stages. Stage 0 = condenser, Stage NumberOfStages-1 = reboiler, intermediate stages are internal trays.",
+      "properties": ["name", "number_of_stages", "column_type", "feed_stage_hint"],
+      "nested_types": ["Stage"],
+      "allowed_relationships": ["RECEIVES_FEED_FROM", "PRODUCES", "CONSUMES_DUTY", "REJECTS_DUTY"]
+    },
+    "Stage": {
+      "description": "Single theoretical stage inside a Column. Nested under the Column entity (NOT a first-class entity in refinery_instance.json's `entities` dict). Stage tags (COL-X.STAGE_N.<prop>) map to `stages[N].<prop>` in tag_mapping.json.",
+      "properties": ["index", "purpose"],
+      "nested": true
+    },
+    "Heater": {
+      "description": "Heat exchanger or proxy heater. In this substrate: 'Thermal Oil Heating' (external utility input) and 'Reboiler (Proxy)' (handoff to the column reboiler).",
+      "properties": ["name", "heater_type"],
+      "allowed_relationships": ["RECEIVES_FROM", "DISCHARGES_TO", "CONSUMES_DUTY", "REJECTS_DUTY"]
+    },
+    "Pump": {
+      "description": "Centrifugal pump moving liquid. In this substrate: thermal oil circulation pump.",
+      "properties": ["name"],
+      "allowed_relationships": ["RECEIVES_FROM", "DISCHARGES_TO", "CONSUMES_DUTY"]
+    },
+    "StorageTank": {
+      "description": "Inventory vessel for the working fluid. In this substrate: Therminol VP1 buffer.",
+      "properties": ["name", "fluid"],
+      "allowed_relationships": ["RECEIVES_FROM", "DISCHARGES_TO"]
+    },
+    "MaterialStream": {
+      "description": "Stream of mass (gas, liquid, or multi-phase) connecting unit ops. May be multi-phase with OVERALL/VAPOR/LIQUID per-phase tags (Phase 0a Q-2 phase handling).",
+      "properties": ["name", "phase_config", "service"],
+      "allowed_relationships": ["FROM", "TO"]
+    },
+    "EnergyStream": {
+      "description": "Heat duty (kW) as a flowsheet quantity. May be CONSTRAINED_BY a Constraint that bridges subsystems.",
+      "properties": ["name", "service", "sign_convention"],
+      "allowed_relationships": ["FROM", "TO", "CONSTRAINED_BY"]
+    },
+    "Recycle": {
+      "description": "DWSIM Recycle block — annotates a closed loop's tear stream and drives convergence iterations. Not physical equipment; appears in Phase 0a's owner_type as 'Recycle'.",
+      "properties": ["name"],
+      "allowed_relationships": ["CLOSES_LOOP", "REOPENS_LOOP"]
+    },
+    "Constraint": {
+      "description": "DWSIM Specification block enforcing an equality between two flowsheet quantities (typically EnergyStream values). Subsystem-less in Phase 0a (subsystem=None); sits at REFINERY level in the ontology since it can bridge subsystems. Two instances in this substrate: SPEC-02 (Reboiler Duty = -Reboiler Duty (2)) and SPEC-020 (Heating Duty = Reboiler Duty (2)).",
+      "properties": ["name", "rule", "active"],
+      "allowed_relationships": ["LHS", "RHS"]
+    }
+  },
+  "entity_count_summary": {
+    "expected_first_class_entities": 26,
+    "ontology_aggregators": 3,
+    "phase0a_sim_objects": 23,
+    "breakdown": {
+      "Refinery": 1,
+      "Subsystem": 2,
+      "Column": 1,
+      "Heater": 2,
+      "Pump": 1,
+      "StorageTank": 1,
+      "MaterialStream": 10,
+      "EnergyStream": 5,
+      "Recycle": 1,
+      "Constraint": 2
+    },
+    "nested_count": {
+      "Stage": 12
+    }
+  }
+}

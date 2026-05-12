@@ -1,0 +1,519 @@
+{
+  "version": "0.1.0",
+  "schema_version": "0.1.0",
+  "refinery_id": "REFINERY",
+  "description": "Refinery Digital Twin instance grounded in the locked DWSIM substrate (Petroleum Distillation with Reboiler Heating Fluid). 26 entities: 23 Phase 0a sim objects + 3 ontology aggregators (1 Refinery + 2 Subsystems). Topology hand-curated from Phase 0a findings + standard petroleum-distillation-with-reboiler-heating-fluid flowsheet knowledge — operator (chem-eng) verifies the thermal oil loop ordering before this lands on phase-5-ontology.",
+  "entities": {
+    "REFINERY": {
+      "id": "REFINERY",
+      "type": "Refinery",
+      "name": "Petroleum Distillation with Reboiler Heating Fluid",
+      "aliases": ["the refinery", "the plant", "the substrate"],
+      "subsystem": null,
+      "properties": {
+        "name": "Petroleum Distillation with Reboiler Heating Fluid",
+        "substrate_file": "/Applications/DWSIM.app/Contents/MonoBundle/samples/Petroleum Distillation with Reboiler Heating Fluid.dwxmz",
+        "property_packages": ["Peng-Robinson (PR)", "CoolProp (Incompressible Fluids)"]
+      },
+      "relationships": [
+        {"type": "CONTAINS", "target": "SS-PETROLEUM_SIDE"},
+        {"type": "CONTAINS", "target": "SS-THERMAL_OIL_LOOP"},
+        {"type": "CONTAINS", "target": "SPEC-02"},
+        {"type": "CONTAINS", "target": "SPEC-020"}
+      ]
+    },
+
+    "SS-PETROLEUM_SIDE": {
+      "id": "SS-PETROLEUM_SIDE",
+      "type": "Subsystem",
+      "name": "Petroleum side",
+      "aliases": ["petroleum side", "petroleum subsystem", "PR side", "Peng-Robinson side", "the column side"],
+      "subsystem": null,
+      "properties": {
+        "name": "Petroleum side",
+        "property_package": "Peng-Robinson (PR)",
+        "description": "Distillation column and its feed/product streams. 30 pseudocomponents (PSE_3165_2..31)."
+      },
+      "relationships": [
+        {"type": "CONTAINS", "target": "MS-OIL"},
+        {"type": "CONTAINS", "target": "MS-LIGHT_PRODUCT"},
+        {"type": "CONTAINS", "target": "MS-LIGHT_INTERMEDIATE_PRODUCT"},
+        {"type": "CONTAINS", "target": "MS-INTERMEDIATE_PRODUCT"},
+        {"type": "CONTAINS", "target": "MS-HEAVY_PRODUCT"},
+        {"type": "CONTAINS", "target": "COL-DISTILLATION_COLUMN"},
+        {"type": "CONTAINS", "target": "ES-CONDENSER_DUTY"},
+        {"type": "CONTAINS", "target": "ES-REBOILER_DUTY"}
+      ]
+    },
+
+    "SS-THERMAL_OIL_LOOP": {
+      "id": "SS-THERMAL_OIL_LOOP",
+      "type": "Subsystem",
+      "name": "Thermal oil loop",
+      "aliases": ["thermal oil loop", "thermal oil side", "the heating loop", "Therminol loop", "CoolProp side"],
+      "subsystem": null,
+      "properties": {
+        "name": "Thermal oil loop",
+        "property_package": "CoolProp (Incompressible Fluids)",
+        "description": "Closed Therminol VP1 circulation loop delivering reboiler heat via a proxy heat exchanger. Closed by RECYCLE-REC_012."
+      },
+      "relationships": [
+        {"type": "CONTAINS", "target": "MS-THERMINOL_VP1"},
+        {"type": "CONTAINS", "target": "MS-MSTR_010"},
+        {"type": "CONTAINS", "target": "MS-MSTR_013"},
+        {"type": "CONTAINS", "target": "MS-MSTR_014"},
+        {"type": "CONTAINS", "target": "MS-MSTR_018"},
+        {"type": "CONTAINS", "target": "HC-THERMAL_OIL_HEATING"},
+        {"type": "CONTAINS", "target": "HC-REBOILER_PROXY"},
+        {"type": "CONTAINS", "target": "PMP-THERMAL_OIL_PUMP"},
+        {"type": "CONTAINS", "target": "TANK-THERMINOL_VP1_STORAGE_TANK"},
+        {"type": "CONTAINS", "target": "RECYCLE-REC_012"},
+        {"type": "CONTAINS", "target": "ES-HEATING_DUTY"},
+        {"type": "CONTAINS", "target": "ES-REBOILER_DUTY_2"},
+        {"type": "CONTAINS", "target": "ES-ESTR_017"}
+      ]
+    },
+
+    "COL-DISTILLATION_COLUMN": {
+      "id": "COL-DISTILLATION_COLUMN",
+      "type": "Column",
+      "name": "Distillation Column",
+      "aliases": ["the column", "distillation column", "main column", "C-101", "DC-101", "atmospheric tower"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Distillation Column",
+        "number_of_stages": 12,
+        "column_type": "RegularDistillationColumn",
+        "feed_stage_hint": null
+      },
+      "stages": [
+        {"index": 0,  "purpose": "condenser"},
+        {"index": 1,  "purpose": "internal"},
+        {"index": 2,  "purpose": "internal"},
+        {"index": 3,  "purpose": "internal"},
+        {"index": 4,  "purpose": "internal"},
+        {"index": 5,  "purpose": "internal"},
+        {"index": 6,  "purpose": "internal"},
+        {"index": 7,  "purpose": "internal"},
+        {"index": 8,  "purpose": "internal"},
+        {"index": 9,  "purpose": "internal"},
+        {"index": 10, "purpose": "internal"},
+        {"index": 11, "purpose": "reboiler"}
+      ],
+      "normal_ranges": {
+        "RefluxRatio": {"min": 2.0, "max": 3.0, "unit": "dimensionless"},
+        "CondenserDuty": {"min": 25000, "max": 35000, "unit": "kW"},
+        "ReboilerDuty": {"min": -32000, "max": -22000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "RECEIVES_FEED_FROM", "target": "MS-OIL"},
+        {"type": "PRODUCES",           "target": "MS-LIGHT_PRODUCT"},
+        {"type": "PRODUCES",           "target": "MS-LIGHT_INTERMEDIATE_PRODUCT"},
+        {"type": "PRODUCES",           "target": "MS-INTERMEDIATE_PRODUCT"},
+        {"type": "PRODUCES",           "target": "MS-HEAVY_PRODUCT"},
+        {"type": "REJECTS_DUTY",       "target": "ES-CONDENSER_DUTY"},
+        {"type": "CONSUMES_DUTY",      "target": "ES-REBOILER_DUTY"}
+      ]
+    },
+
+    "MS-OIL": {
+      "id": "MS-OIL",
+      "type": "MaterialStream",
+      "name": "Oil feed",
+      "aliases": ["oil", "feed", "crude", "oil feed", "the feed", "crude feed"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Oil",
+        "phase_config": "multi-phase (OVERALL + VAPOR)",
+        "service": "crude oil feed to the distillation column"
+      },
+      "normal_ranges": {
+        "T_K":             {"min": 340,    "max": 360,    "unit": "K"},
+        "P_Pa":            {"min": 98000,  "max": 105000, "unit": "Pa"},
+        "mass_flow_kg_s":  {"min": 35,     "max": 45,     "unit": "kg/s"},
+        "vapor_fraction":  {"min": 0.10,   "max": 0.25,   "unit": "dimensionless"}
+      },
+      "relationships": [
+        {"type": "TO", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "MS-LIGHT_PRODUCT": {
+      "id": "MS-LIGHT_PRODUCT",
+      "type": "MaterialStream",
+      "name": "Light Product",
+      "aliases": ["light product", "naphtha", "light fraction", "overhead product"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Light Product",
+        "phase_config": "single-phase liquid",
+        "service": "overhead light distillate from the column"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "MS-LIGHT_INTERMEDIATE_PRODUCT": {
+      "id": "MS-LIGHT_INTERMEDIATE_PRODUCT",
+      "type": "MaterialStream",
+      "name": "Light Intermediate product",
+      "aliases": ["light intermediate", "light intermediate product", "light gasoil", "light side draw"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Light Intermediate product",
+        "phase_config": "single-phase liquid",
+        "service": "upper side-draw distillate"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "MS-INTERMEDIATE_PRODUCT": {
+      "id": "MS-INTERMEDIATE_PRODUCT",
+      "type": "MaterialStream",
+      "name": "Intermediate Product",
+      "aliases": ["intermediate product", "kerosene", "intermediate distillate", "middle side draw"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Intermediate Product",
+        "phase_config": "single-phase liquid",
+        "service": "middle side-draw distillate"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "MS-HEAVY_PRODUCT": {
+      "id": "MS-HEAVY_PRODUCT",
+      "type": "MaterialStream",
+      "name": "\"Heavy\" Product",
+      "aliases": ["heavy product", "heavy", "residue", "bottoms", "atmospheric residue"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "\"Heavy\" Product",
+        "phase_config": "single-phase liquid",
+        "service": "column bottoms / heaviest distillate"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "ES-CONDENSER_DUTY": {
+      "id": "ES-CONDENSER_DUTY",
+      "type": "EnergyStream",
+      "name": "Condenser Duty",
+      "aliases": ["condenser duty", "overhead cooling", "top duty", "Qc"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Condenser Duty",
+        "service": "heat rejected by the column's overhead condenser",
+        "sign_convention": "positive when duty is rejected (heat out of column)"
+      },
+      "normal_ranges": {
+        "EnergyFlow": {"min": 25000, "max": 35000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "FROM", "target": "COL-DISTILLATION_COLUMN"}
+      ]
+    },
+
+    "ES-REBOILER_DUTY": {
+      "id": "ES-REBOILER_DUTY",
+      "type": "EnergyStream",
+      "name": "Reboiler Duty",
+      "aliases": ["reboiler duty", "bottoms heat", "column reboiler", "Qr"],
+      "subsystem": "petroleum",
+      "properties": {
+        "name": "Reboiler Duty",
+        "service": "heat required by the column reboiler (delivered from the thermal oil loop via SPEC-02)",
+        "sign_convention": "negative when duty is consumed (heat into column, DWSIM column-model convention)"
+      },
+      "normal_ranges": {
+        "EnergyFlow": {"min": -32000, "max": -22000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "TO",             "target": "COL-DISTILLATION_COLUMN"},
+        {"type": "CONSTRAINED_BY", "target": "SPEC-02"}
+      ]
+    },
+
+    "ES-REBOILER_DUTY_2": {
+      "id": "ES-REBOILER_DUTY_2",
+      "type": "EnergyStream",
+      "name": "Reboiler Duty (2)",
+      "aliases": ["reboiler duty 2", "proxy reboiler duty", "thermal oil reboiler duty", "Qr_proxy"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Reboiler Duty (2)",
+        "service": "duty rejected by the proxy heat exchanger that delivers reboiler heat to the column",
+        "sign_convention": "positive when duty is rejected (heat out of HC-REBOILER_PROXY toward the column)"
+      },
+      "normal_ranges": {
+        "EnergyFlow": {"min": 22000, "max": 32000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "FROM",           "target": "HC-REBOILER_PROXY"},
+        {"type": "CONSTRAINED_BY", "target": "SPEC-02"},
+        {"type": "CONSTRAINED_BY", "target": "SPEC-020"}
+      ]
+    },
+
+    "ES-HEATING_DUTY": {
+      "id": "ES-HEATING_DUTY",
+      "type": "EnergyStream",
+      "name": "Heating Duty",
+      "aliases": ["heating duty", "thermal oil heater duty", "utility heat", "Qh"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Heating Duty",
+        "service": "external heat input into the thermal oil heater (energy that ultimately reaches the column reboiler)",
+        "sign_convention": "positive (heat into HC-THERMAL_OIL_HEATING)"
+      },
+      "normal_ranges": {
+        "EnergyFlow": {"min": 22000, "max": 32000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "TO",             "target": "HC-THERMAL_OIL_HEATING"},
+        {"type": "CONSTRAINED_BY", "target": "SPEC-020"}
+      ]
+    },
+
+    "ES-ESTR_017": {
+      "id": "ES-ESTR_017",
+      "type": "EnergyStream",
+      "name": "ESTR-017",
+      "aliases": ["pump power", "thermal oil pump power", "ESTR-017"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "ESTR-017",
+        "service": "shaft power consumed by the thermal oil circulation pump",
+        "sign_convention": "positive (power into PMP-THERMAL_OIL_PUMP)"
+      },
+      "normal_ranges": {
+        "EnergyFlow": {"min": 20, "max": 40, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "TO", "target": "PMP-THERMAL_OIL_PUMP"}
+      ]
+    },
+
+    "HC-THERMAL_OIL_HEATING": {
+      "id": "HC-THERMAL_OIL_HEATING",
+      "type": "Heater",
+      "name": "Thermal Oil Heating",
+      "aliases": ["thermal oil heater", "main heater", "utility heater", "fired heater"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Thermal Oil Heating",
+        "heater_type": "external utility heater"
+      },
+      "normal_ranges": {
+        "OutletTemperature": {"min": 470, "max": 510, "unit": "K"},
+        "HeatDuty":          {"min": 22000, "max": 32000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "RECEIVES_FROM",  "target": "MS-MSTR_010"},
+        {"type": "DISCHARGES_TO",  "target": "MS-MSTR_013"},
+        {"type": "CONSUMES_DUTY",  "target": "ES-HEATING_DUTY"}
+      ]
+    },
+
+    "HC-REBOILER_PROXY": {
+      "id": "HC-REBOILER_PROXY",
+      "type": "Heater",
+      "name": "Reboiler (Proxy)",
+      "aliases": ["reboiler proxy", "reboiler hx", "reboiler heat exchanger", "proxy heater"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Reboiler (Proxy)",
+        "heater_type": "process-side heat exchanger (proxy for column reboiler heat handoff)"
+      },
+      "normal_ranges": {
+        "HeatDuty": {"min": -32000, "max": -22000, "unit": "kW"}
+      },
+      "relationships": [
+        {"type": "RECEIVES_FROM",  "target": "MS-MSTR_013"},
+        {"type": "DISCHARGES_TO",  "target": "MS-MSTR_014"},
+        {"type": "REJECTS_DUTY",   "target": "ES-REBOILER_DUTY_2"}
+      ]
+    },
+
+    "PMP-THERMAL_OIL_PUMP": {
+      "id": "PMP-THERMAL_OIL_PUMP",
+      "type": "Pump",
+      "name": "Thermal Oil Pump",
+      "aliases": ["thermal oil pump", "circulation pump", "the pump", "P-101"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Thermal Oil Pump"
+      },
+      "normal_ranges": {
+        "Efficiency": {"min": 70, "max": 80, "unit": "%"},
+        "DeltaP":     {"min": 90000, "max": 110000, "unit": "Pa"}
+      },
+      "relationships": [
+        {"type": "RECEIVES_FROM",   "target": "MS-THERMINOL_VP1"},
+        {"type": "DISCHARGES_TO",   "target": "MS-MSTR_010"},
+        {"type": "CONSUMES_DUTY",   "target": "ES-ESTR_017"}
+      ]
+    },
+
+    "TANK-THERMINOL_VP1_STORAGE_TANK": {
+      "id": "TANK-THERMINOL_VP1_STORAGE_TANK",
+      "type": "StorageTank",
+      "name": "Therminol VP1 Storage Tank",
+      "aliases": ["storage tank", "therminol tank", "fluid tank", "buffer tank", "T-101"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Therminol VP1 Storage Tank",
+        "fluid": "Therminol VP1 (eutectic biphenyl/diphenyl oxide heat transfer fluid)"
+      },
+      "relationships": [
+        {"type": "RECEIVES_FROM",  "target": "MS-MSTR_018"},
+        {"type": "DISCHARGES_TO",  "target": "MS-THERMINOL_VP1"}
+      ]
+    },
+
+    "MS-THERMINOL_VP1": {
+      "id": "MS-THERMINOL_VP1",
+      "type": "MaterialStream",
+      "name": "Therminol VP1",
+      "aliases": ["therminol", "therminol vp1", "thermal oil", "heating fluid", "pump suction"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "Therminol VP1",
+        "phase_config": "single-phase liquid (composition is static per Phase 0a Q2 — CoolProp Incompressible ignores composition)",
+        "service": "storage tank discharge → pump suction"
+      },
+      "normal_ranges": {
+        "mass_flow_kg_s": {"min": 190, "max": 210, "unit": "kg/s"},
+        "T_K":            {"min": 400, "max": 430, "unit": "K"}
+      },
+      "relationships": [
+        {"type": "FROM", "target": "TANK-THERMINOL_VP1_STORAGE_TANK"},
+        {"type": "TO",   "target": "PMP-THERMAL_OIL_PUMP"}
+      ]
+    },
+
+    "MS-MSTR_010": {
+      "id": "MS-MSTR_010",
+      "type": "MaterialStream",
+      "name": "MSTR-010",
+      "aliases": ["MSTR-010", "pump discharge"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "MSTR-010",
+        "phase_config": "single-phase liquid (static composition)",
+        "service": "pump discharge → heater inlet"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "PMP-THERMAL_OIL_PUMP"},
+        {"type": "TO",   "target": "HC-THERMAL_OIL_HEATING"}
+      ]
+    },
+
+    "MS-MSTR_013": {
+      "id": "MS-MSTR_013",
+      "type": "MaterialStream",
+      "name": "MSTR-013",
+      "aliases": ["MSTR-013", "hot oil supply", "heater outlet"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "MSTR-013",
+        "phase_config": "single-phase liquid (static composition)",
+        "service": "heater outlet → reboiler-proxy inlet (hot oil supply)"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "HC-THERMAL_OIL_HEATING"},
+        {"type": "TO",   "target": "HC-REBOILER_PROXY"}
+      ]
+    },
+
+    "MS-MSTR_014": {
+      "id": "MS-MSTR_014",
+      "type": "MaterialStream",
+      "name": "MSTR-014",
+      "aliases": ["MSTR-014", "cooled oil return", "reboiler outlet (tear stream input)"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "MSTR-014",
+        "phase_config": "single-phase liquid (static composition)",
+        "service": "reboiler-proxy outlet → recycle block input (loop tear stream, before convergence iteration)"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "HC-REBOILER_PROXY"},
+        {"type": "TO",   "target": "RECYCLE-REC_012"}
+      ]
+    },
+
+    "MS-MSTR_018": {
+      "id": "MS-MSTR_018",
+      "type": "MaterialStream",
+      "name": "MSTR-018",
+      "aliases": ["MSTR-018", "tank return", "loop tear stream output"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "MSTR-018",
+        "phase_config": "single-phase liquid (static composition)",
+        "service": "recycle block output → storage tank (loop closure, identical to MSTR-014 at convergence)"
+      },
+      "relationships": [
+        {"type": "FROM", "target": "RECYCLE-REC_012"},
+        {"type": "TO",   "target": "TANK-THERMINOL_VP1_STORAGE_TANK"}
+      ]
+    },
+
+    "RECYCLE-REC_012": {
+      "id": "RECYCLE-REC_012",
+      "type": "Recycle",
+      "name": "REC-012",
+      "aliases": ["REC-012", "recycle block", "loop closure", "thermal oil recycle"],
+      "subsystem": "thermal_oil",
+      "properties": {
+        "name": "REC-012"
+      },
+      "relationships": [
+        {"type": "CLOSES_LOOP",  "target": "MS-MSTR_014"},
+        {"type": "REOPENS_LOOP", "target": "MS-MSTR_018"}
+      ]
+    },
+
+    "SPEC-02": {
+      "id": "SPEC-02",
+      "type": "Constraint",
+      "name": "SPEC-02",
+      "aliases": ["SPEC-02", "reboiler duty equality", "petroleum/thermal-oil energy balance"],
+      "subsystem": null,
+      "properties": {
+        "name": "SPEC-02",
+        "rule": "Reboiler Duty = -Reboiler Duty (2)  (signed equality bridging petroleum and thermal-oil subsystems)",
+        "active": true
+      },
+      "relationships": [
+        {"type": "LHS", "target": "ES-REBOILER_DUTY"},
+        {"type": "RHS", "target": "ES-REBOILER_DUTY_2"}
+      ]
+    },
+
+    "SPEC-020": {
+      "id": "SPEC-020",
+      "type": "Constraint",
+      "name": "SPEC-020",
+      "aliases": ["SPEC-020", "heating-duty equality", "thermal-oil energy balance"],
+      "subsystem": null,
+      "properties": {
+        "name": "SPEC-020",
+        "rule": "Heating Duty = Reboiler Duty (2)  (equality within the thermal-oil subsystem)",
+        "active": true
+      },
+      "relationships": [
+        {"type": "LHS", "target": "ES-HEATING_DUTY"},
+        {"type": "RHS", "target": "ES-REBOILER_DUTY_2"}
+      ]
+    }
+  }
+}

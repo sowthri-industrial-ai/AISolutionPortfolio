@@ -83,14 +83,17 @@ DEFAULT_POLL_INTERVAL_S = 5.0
 
 UA_TYPE_MAP = {
     "Double": ua.VariantType.Double,
-    "Int32": ua.VariantType.Int32,
+    # Python ints → Int64 (not Int32): asyncua Variant infers Int64 by default
+    # when packing Python int values, so the node's declared type must match
+    # or writes fail with BadTypeMismatch. Bug 2 from A2 smoke (2026-05-11).
+    "Int64": ua.VariantType.Int64,
     "Boolean": ua.VariantType.Boolean,
     "String": ua.VariantType.String,
 }
 
 DEFAULTS_BY_TYPE: dict[ua.VariantType, Any] = {
     ua.VariantType.Double: 0.0,
-    ua.VariantType.Int32: 0,
+    ua.VariantType.Int64: 0,
     ua.VariantType.Boolean: False,
     ua.VariantType.String: "",
 }
@@ -155,9 +158,18 @@ class Stage4Server:
         )
 
     async def _build_variable_nodes(self) -> None:
-        """Walk specs, creating folders on demand + leaf Variable nodes."""
+        """Walk specs, creating folders on demand + leaf Variable nodes.
+
+        Tracks failures and surfaces them: logs first 5 at ERROR level, raises
+        if zero nodes succeed (server can't function with 0 variables). Per-100
+        progress log so the operator sees progress in real time rather than
+        waiting for the final count.
+        """
         folder_cache: dict[tuple[str, ...], Any] = {(): self.refinery_root}
-        for spec in self.specs:
+        failures: list[tuple[str, str]] = []  # (tag_id, error_text)
+        total = len(self.specs)
+
+        for i, spec in enumerate(self.specs):
             try:
                 parent = await self._ensure_folder(folder_cache, spec.folder_path)
                 ua_type = UA_TYPE_MAP.get(spec.ua_type, ua.VariantType.Double)
@@ -167,12 +179,40 @@ class Stage4Server:
                 )
                 # Initial status: BadNoCommunication — no snapshot ingested yet.
                 await self._write_with_status(
-                    node, init_val, ua.StatusCode(ua.StatusCodes.BadNoCommunication)
+                    node,
+                    init_val,
+                    ua_type,
+                    ua.StatusCode(ua.StatusCodes.BadNoCommunication),
                 )
                 self.node_map[spec.tag_id] = node
                 self.node_types[spec.tag_id] = ua_type
             except Exception as e:
-                self.log.warning(f"failed to create node for {spec.tag_id}: {e}")
+                err = f"{type(e).__name__}: {e}"
+                failures.append((spec.tag_id, err))
+                # First 5 failures get ERROR-level so the actual cause is
+                # visible without grep'ing 1550 warnings.
+                if len(failures) <= 5:
+                    self.log.error(f"failed to create node for {spec.tag_id}: {err}")
+
+            # Per-100 progress log.
+            done = i + 1
+            if done % 100 == 0 or done == total:
+                self.log.info(
+                    f"  building nodes: {done}/{total} "
+                    f"(ok={len(self.node_map)}, failed={len(failures)})"
+                )
+
+        if failures:
+            self.log.error(
+                f"hierarchy build had {len(failures)} failures "
+                f"(showing up to first 5 in earlier ERROR lines)"
+            )
+        if not self.node_map:
+            sample = failures[0] if failures else ("(none)", "no failures recorded")
+            raise RuntimeError(
+                f"hierarchy build failed: 0/{total} variables created. "
+                f"First failure: {sample[0]}: {sample[1]}"
+            )
 
     async def _ensure_folder(
         self, cache: dict[tuple[str, ...], Any], path: tuple[str, ...]
@@ -231,11 +271,25 @@ class Stage4Server:
     # ---- Cycle / writes ----
 
     async def _write_with_status(
-        self, node: Any, value: Any, status: ua.StatusCode
+        self,
+        node: Any,
+        value: Any,
+        ua_type: ua.VariantType,
+        status: ua.StatusCode,
     ) -> None:
-        """Write value + explicit StatusCode in a single Value-attribute update."""
-        dv = ua.DataValue(ua.Variant(value))
-        dv.StatusCode_ = status
+        """Write value + explicit StatusCode in a single Value-attribute update.
+
+        ua.DataValue is a frozen dataclass in asyncua 1.x — fields cannot be
+        mutated after construction. Both Value and StatusCode_ must be passed
+        to the constructor. Variant is also passed with explicit type so the
+        node's declared type matches what asyncua serializes (avoids
+        BadTypeMismatch for Int64 nodes seeded with Python int defaults). Bug
+        1 from A2 smoke (2026-05-11).
+        """
+        dv = ua.DataValue(
+            Value=ua.Variant(value, ua_type),
+            StatusCode_=status,
+        )
         await node.write_attribute(ua.AttributeIds.Value, dv)
 
     async def _safe_write_value(self, node: Any, value: Any) -> None:
@@ -251,7 +305,7 @@ class Stage4Server:
         try:
             if ua_type == ua.VariantType.Double:
                 return float(raw)
-            if ua_type == ua.VariantType.Int32:
+            if ua_type == ua.VariantType.Int64:
                 # Python bools are ints; preserve int semantics
                 return int(raw)
             if ua_type == ua.VariantType.Boolean:
@@ -304,12 +358,13 @@ class Stage4Server:
             if raw == last:
                 stats["unchanged"] += 1
                 continue
-            coerced = self._coerce(raw, self.node_types.get(tag_id, ua.VariantType.Double))
+            ua_type = self.node_types.get(tag_id, ua.VariantType.Double)
+            coerced = self._coerce(raw, ua_type)
             if coerced is None:
                 stats["errors"] += 1
                 continue
             try:
-                await self._write_with_status(node, coerced, status)
+                await self._write_with_status(node, coerced, ua_type, status)
                 self.last_values[tag_id] = raw
                 stats["written"] += 1
             except Exception as e:

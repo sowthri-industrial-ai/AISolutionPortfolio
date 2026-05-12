@@ -82,11 +82,16 @@ def _ua_type_from_value(v: Any) -> str:
 
     Pythonnet / DWSIM values from Phase 0a probe-time. Note: isinstance(bool, int)
     is True in Python, so check bool first.
+
+    Python ints map to Int64 (not Int32): the asyncua Variant infers Int64 by
+    default when packing Python int values (Python ints can be arbitrary size),
+    so the node's declared type must match or writes fail with
+    BadTypeMismatch. Bug 2 from A2 smoke (2026-05-11).
     """
     if isinstance(v, bool):
         return "Boolean"
     if isinstance(v, int):
-        return "Int32"
+        return "Int64"
     if isinstance(v, float):
         return "Double"
     if isinstance(v, str):

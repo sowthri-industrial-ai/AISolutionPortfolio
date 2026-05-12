@@ -14,6 +14,76 @@ Format per entry: **Surfaced in** (which phase noticed it) · **Severity**
 
 ---
 
+## Cherry variant SKU not always picked by planner
+
+**Surfaced in:** Phase 3 live smoke test on the deployed URL — *"Find
+peaches and cherries, prefer local"* caused the planner to emit a bare
+`cherry` SKU instead of `cherry_bing` or `cherry_rainier`.
+`stone_fruit_stand` returned OOS for the unknown SKU, single iteration,
+half-fulfilled basket.
+
+**Severity:** Medium — directly affects a documented demo prompt (#4 in
+README). Same bug class as the pear fix already landed in Phase 3; the
+existing variant-selection rule in `planner.md` is not strong enough to
+prevent the planner from picking the bare base name when variants exist.
+
+**Workaround in tree:** None — manually use a variant-suffixed form in
+the prompt (e.g. `cherry_bing` instead of `cherries`) to avoid.
+
+**v2 fix sketch:** Strengthen `planner.md`'s variant rule from passive
+("use snake_case + variant suffix") to directive: *"when a user says a
+plural/generic name like cherries, apples, pears, mangoes, oranges,
+ALWAYS pick one specific variant from the available SKU list — never
+emit a bare base name when variants exist."* Add one example per variant
+base. Extend `test_sku_alignment.py` with a regex check for the
+directive phrasing so future prompt edits don't silently weaken it.
+
+**What it unblocks:** All five documented demo prompts working reliably
+on first try, every time. Reduces "it works for me on the seventh
+re-roll" feel that erodes confidence in agent demos.
+
+**Migration path:** Prompt edit + test extension + new image deploy via
+`azd deploy`. ~30 min.
+
+---
+
+## Planner needs an out-of-scope / negation policy
+
+**Surfaced in:** Phase 3 live smoke test — *"I don't want fruits"*
+
+**Severity:** Medium — agent terminates gracefully but produces a
+confusingly synthetic basket (hallucinated `no_fruit` SKU) and an
+awkward "not available" answer for an input that's actually
+out-of-scope. Important for a public portfolio demo where anyone can
+type anything.
+
+**Workaround in tree:** None — current `planner.md` treats every input
+as a valid shopping goal, with no escape hatch for off-topic / negated /
+adversarial inputs.
+
+**v2 fix sketch:** Add an explicit policy to `planner.md`:
+
+- If the goal is not a shopping request (e.g. *"tell me a joke"*, *"I
+  don't want X"*, *"what's the weather"*), emit a special
+  `FruitMarketPlan` with `items=[]` and
+  `reasoning="<why this is out of scope>"`.
+- The reflector treats empty-items plans as immediately done with a
+  polite refusal answer (e.g. *"I'm a fruit-market agent — I can help
+  you source fruit but that's not something I can do."*).
+- For ambiguous-but-on-topic inputs (*"something sweet"*, *"fruits for
+  a party"*), planner emits a normal plan but flags assumptions in the
+  `reasoning` field, which the answer surfaces.
+
+**What it unblocks:** Demo robustness against adversarial or off-topic
+inputs without papering over them. Important for a public portfolio
+demo where anyone can type anything.
+
+**Migration path:** `planner.md` edit + empty-items handling in the
+reflector + 2-3 unit tests for the refusal flow + new image deploy.
+~1-2 hours.
+
+---
+
 ## 1. `AgentBase._reflect` should receive `goal` and `plan`, not just `history`
 
 **Surfaced in:** Phase 3 (FruitMarketAgent's reflector needed both the

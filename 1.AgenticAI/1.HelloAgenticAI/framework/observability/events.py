@@ -78,6 +78,7 @@ class AgentEventType(StrEnum):
     REFLECT = "reflect"
     COMPLETE = "complete"
     SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    GUARDRAIL_BLOCKED = "guardrail_blocked"
 
 
 class AgentEvent(BaseModel):

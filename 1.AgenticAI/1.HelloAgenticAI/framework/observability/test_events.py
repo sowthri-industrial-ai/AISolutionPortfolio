@@ -49,6 +49,13 @@ def test_agent_event_type_includes_phase_4_schema_validation_failed() -> None:
     assert AgentEventType.SCHEMA_VALIDATION_FAILED.value == "schema_validation_failed"
 
 
+def test_agent_event_type_includes_phase_4_guardrail_blocked() -> None:
+    """Phase 4 deliverable 2 — Content Safety input/output gates emit
+    ``GUARDRAIL_BLOCKED`` when the verdict is BLOCK. Explicit presence
+    assertion to prevent silent regression."""
+    assert AgentEventType.GUARDRAIL_BLOCKED.value == "guardrail_blocked"
+
+
 def test_agent_event_type_is_string_enum() -> None:
     """StrEnum so values serialize cleanly for Cosmos."""
     assert AgentEventType.PLAN_START.value == "plan_start"

@@ -3,6 +3,7 @@
 from framework.guardrails.content_safety import (
     CategoryAnalysis,
     ContentSafetyClient,
+    ContentSafetyError,
     ContentSafetyResult,
     ContentSafetyVerdict,
     HarmCategory,
@@ -16,6 +17,7 @@ from framework.guardrails.schema import (
 __all__ = [
     "CategoryAnalysis",
     "ContentSafetyClient",
+    "ContentSafetyError",
     "ContentSafetyResult",
     "ContentSafetyVerdict",
     "HarmCategory",

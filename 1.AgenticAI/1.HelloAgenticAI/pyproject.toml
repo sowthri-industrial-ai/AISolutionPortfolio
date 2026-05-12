@@ -10,7 +10,9 @@ authors = [{ name = "Sowthri Somasundaram" }]
 # Phase 1: placeholder app + framework Python package skeleton.
 # Phase 2: framework runtime — agent orchestration, LLM, memory, guardrails,
 #         observability, evals — approved at Phase 2 kickoff (CLAUDE.md rule 4).
-# Phase 3+ deps will arrive at their respective kickoffs.
+# Phase 3: chainlit added for the live UI demo (approved at Phase 3 kickoff).
+# Phase 4: azure-ai-contentsafety + langfuse added for the input/output gate
+#         and Langfuse Cloud trace ingestion (approved at Phase 4 kickoff).
 dependencies = [
     # Phase 1
     "fastapi>=0.115,<1.0",
@@ -34,6 +36,12 @@ dependencies = [
     "pydantic>=2.10,<3.0",
     # Phase 3 — live UI
     "chainlit>=2.0,<3.0",
+    # Phase 4 — Content Safety REST client (input + output gates) and
+    # Langfuse Cloud SDK (trace/span ingestion alongside App Insights).
+    # azure-ai-contentsafety has both sync and async surfaces; we use the
+    # async one via `azure.ai.contentsafety.aio.ContentSafetyClient`.
+    "azure-ai-contentsafety>=1.0,<2.0",
+    "langfuse>=2.0,<3.0",
 ]
 
 [dependency-groups]

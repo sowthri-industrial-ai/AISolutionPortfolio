@@ -11,13 +11,20 @@ agent run. Phase 2 ships:
 * the :class:`AgentEventEmitter` (async fan-out, optional error swallowing
   for production loops);
 * :class:`InMemorySink` (unit-test fixture) and :class:`LoggingSink`
-  (always-on dev fallback);
-* typed stubs for App Insights / Langfuse / UI stream sinks — Phase 4
-  swaps the stubs for real ingestion.
+  (always-on dev fallback).
+
+Phase 4 adds:
+
+* ``SCHEMA_VALIDATION_FAILED`` and ``GUARDRAIL_BLOCKED`` event types;
+* :class:`AppInsightsSink` (re-exported from
+  :mod:`framework.observability.app_insights`) — real OTel-based App
+  Insights ingestion with lazy init.
 
 The Cosmos sink intentionally lives in :mod:`framework.memory.cosmos`
 because it depends on :class:`CosmosProvider`; importing it here would
-create a layering inversion.
+create a layering inversion. The same separation applies to
+:class:`AppInsightsSink` (its own module under
+:mod:`framework.observability`) and :class:`LangfuseSink` (batch 5).
 """
 
 from __future__ import annotations
@@ -193,28 +200,19 @@ class LoggingSink:
         )
 
 
-# ---------- Phase 3 / Phase 4 stubs ----------
+# ---------- Phase 4 real sinks (re-exported from sibling modules) ----------
 
+# AppInsightsSink lives in framework.observability.app_insights to keep
+# the OTel + Azure Monitor imports out of this base module — projects
+# that don't need App Insights shouldn't pay that import cost. Re-
+# exported here so existing callers' import paths (``from
+# framework.observability.events import AppInsightsSink``) keep
+# working.
+from framework.observability.app_insights import (  # noqa: E402
+    AppInsightsSink as AppInsightsSink,
+)
 
-class AppInsightsSink:
-    """STUB for Phase 4 — App Insights ingestion via OpenTelemetry.
-
-    Phase 2 ships a no-op-ish sink that satisfies :class:`EventSink`; Phase
-    4 swaps in real ``opentelemetry-azure-monitor`` wiring keyed off the
-    AOAI-deployed App Insights connection string.
-    """
-
-    def __init__(self, connection_string: str | None = None) -> None:
-        self._connection_string = connection_string
-        self._logger = logging.getLogger("agent.events.appinsights.stub")
-
-    async def emit(self, event: AgentEvent) -> None:
-        # TODO(phase4): publish via opentelemetry-azure-monitor.
-        self._logger.debug(
-            "STUB AppInsights emit: %s session=%s",
-            event.type.value,
-            event.session_id,
-        )
+# ---------- Phase 4 stubs (replaced in batches 5+) ----------
 
 
 class LangfuseSink:

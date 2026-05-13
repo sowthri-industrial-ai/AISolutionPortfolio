@@ -38,6 +38,12 @@ from uuid import uuid4
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field, ValidationError
 
+from framework.guardrails.content_safety import (
+    ContentSafetyClient,
+    ContentSafetyError,
+    HarmCategory,
+    Severity,
+)
 from framework.guardrails.schema import SchemaValidationError
 from framework.observability.events import (
     AgentEvent,
@@ -113,6 +119,23 @@ class AgentBase(ABC):
     Subclasses implement ``_plan`` / ``_route`` / ``_reflect``. The base
     class owns the graph, event emission, tool invocation, iteration
     capping, and termination.
+
+    Phase 4 batch 3 adds the optional ``content_safety`` parameter for
+    input/output guardrails. When supplied:
+
+    * **Input gate** — :meth:`run` checks the user goal before the
+      planner sees it. A BLOCK verdict raises :class:`ContentSafetyError`
+      after emitting ``GUARDRAIL_BLOCKED`` (gate=input); ``PLAN_START``
+      never fires.
+    * **Output gate** — :meth:`_terminate_node` checks the final answer
+      before emitting ``COMPLETE``. A BLOCK verdict replaces the answer
+      with a redaction notice and emits ``GUARDRAIL_BLOCKED``
+      (gate=output) *in addition to* ``COMPLETE`` — the latter carries
+      the redacted text so downstream sinks (Chainlit step, Cosmos
+      trace, Langfuse trace) still close the run cleanly.
+
+    When ``content_safety=None`` (default), behavior is identical to
+    Phase 3 — backward compatible with every existing test.
     """
 
     def __init__(
@@ -121,10 +144,12 @@ class AgentBase(ABC):
         emitter: AgentEventEmitter,
         tools: ToolRegistry,
         max_iterations: int = 3,
+        content_safety: ContentSafetyClient | None = None,
     ) -> None:
         self._emitter = emitter
         self._tools = tools
         self._max_iterations = max_iterations
+        self._content_safety = content_safety
         self._graph = self._build_graph()
 
     # ----- subclass contract -----
@@ -175,8 +200,15 @@ class AgentBase(ABC):
         *,
         session_id: str | None = None,
     ) -> AgentState:
-        """Run the agent against ``goal`` and return the final state."""
+        """Run the agent against ``goal`` and return the final state.
+
+        If ``content_safety`` is configured and the input is BLOCKed,
+        emits a ``GUARDRAIL_BLOCKED`` event (gate=input) and raises
+        :class:`ContentSafetyError` before any agent-loop work happens —
+        ``PLAN_START`` does not fire.
+        """
         sid = session_id or str(uuid4())
+        await self._enforce_input_gate(sid, goal)
         initial: AgentState = {
             "session_id": sid,
             "goal": goal,
@@ -185,6 +217,31 @@ class AgentBase(ABC):
             "complete": False,
         }
         return await self._graph.ainvoke(initial)  # type: ignore[no-any-return]
+
+    async def _enforce_input_gate(self, session_id: str, goal: str) -> None:
+        """Phase 4 batch 3 input gate. No-op if ``content_safety`` is None.
+
+        Emits ``GUARDRAIL_BLOCKED`` (gate=input) before raising so the
+        block is visible in App Insights / Langfuse / Cosmos / the UI
+        trace even though the agent loop never starts.
+        """
+        if self._content_safety is None:
+            return
+        result = await self._content_safety.check_text(goal)
+        if not result.is_blocked():
+            return
+        categories = result.blocking_categories()
+        severity = result.max_severity()
+        await self._emit(
+            session_id,
+            AgentEventType.GUARDRAIL_BLOCKED,
+            payload=_guardrail_blocked_payload("input", categories, severity),
+        )
+        raise ContentSafetyError(
+            gate="input",
+            blocking_categories=categories,
+            severity=severity,
+        )
 
     # ----- node implementations -----
 
@@ -317,6 +374,13 @@ class AgentBase(ABC):
     async def _terminate_node(self, state: AgentState) -> dict[str, Any]:
         sid = state["session_id"]
         final_answer = state.get("final_answer") or _fallback_answer(state)
+        # Phase 4 batch 3 output gate. If a BLOCK fires, we replace the
+        # answer with a redaction notice AND emit GUARDRAIL_BLOCKED in
+        # addition to COMPLETE. Both fire deliberately:
+        # - GUARDRAIL_BLOCKED for the workbook / Langfuse trace
+        # - COMPLETE so the UI step trail closes cleanly and the
+        #   redacted text is what Chainlit renders
+        final_answer = await self._enforce_output_gate(sid, final_answer)
         await self._emit(
             sid,
             AgentEventType.COMPLETE,
@@ -326,6 +390,30 @@ class AgentBase(ABC):
             },
         )
         return {"final_answer": final_answer}
+
+    async def _enforce_output_gate(self, session_id: str, final_answer: str) -> str:
+        """Phase 4 batch 3 output gate. Returns the (possibly redacted)
+        ``final_answer``. No-op if ``content_safety`` is None.
+
+        Unlike the input gate, BLOCK does NOT raise — the run still
+        completes; the user sees a polite "answer redacted" message
+        instead of the agent's text. Raising here would orphan the run
+        (the agent's done; just the answer is unsafe to surface) and
+        complicate Chainlit's step rendering.
+        """
+        if self._content_safety is None:
+            return final_answer
+        result = await self._content_safety.check_text(final_answer)
+        if not result.is_blocked():
+            return final_answer
+        categories = result.blocking_categories()
+        severity = result.max_severity()
+        await self._emit(
+            session_id,
+            AgentEventType.GUARDRAIL_BLOCKED,
+            payload=_guardrail_blocked_payload("output", categories, severity),
+        )
+        return _output_redaction_notice(categories, severity)
 
     # ----- helpers -----
 
@@ -454,6 +542,49 @@ def _truncate_errors(errors: Sequence[Mapping[str, Any]]) -> list[Mapping[str, A
 def _coerce_history(raw: list[dict[str, Any]]) -> list[HistoryEntry]:
     """Re-hydrate the history list back into Pydantic models for subclasses."""
     return [HistoryEntry.model_validate(entry) for entry in raw]
+
+
+# ---------- Phase 4 batch 3: guardrail payload + redaction notice ----------
+
+
+def _guardrail_blocked_payload(
+    gate: str,
+    categories: list[HarmCategory],
+    severity: Severity,
+) -> dict[str, Any]:
+    """Standardised payload for a ``GUARDRAIL_BLOCKED`` event.
+
+    The workbook (deliverable 5) groups by ``payload.gate`` and
+    ``payload.severity_name``; Langfuse tags traces with both. Keep this
+    shape stable — sinks and KQL queries depend on it.
+    """
+    return {
+        "gate": gate,
+        "categories": [c.value for c in categories],
+        "severity": severity.value,
+        "severity_name": severity.name,
+    }
+
+
+def _output_redaction_notice(
+    categories: list[HarmCategory],
+    severity: Severity,
+) -> str:
+    """User-facing message when the output gate redacts the answer.
+
+    Mentions the categories + severity so the user knows WHY their
+    answer was withheld — opaque "filtered" messages are worse than no
+    answer because they offer no guidance for rephrasing. The text is
+    intentionally agent-voice (not error-voice) so Chainlit can render
+    it as the final agent message, not as an error step.
+    """
+    cats = ", ".join(c.value for c in categories) or "<unknown>"
+    return (
+        "I generated an answer, but it was redacted by safety filters "
+        f"before I could share it. Internal categories: {cats} "
+        f"(severity={severity.name}). Please rephrase your goal or try "
+        "a different prompt."
+    )
 
 
 def _to_payload(value: Any) -> Any:

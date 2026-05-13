@@ -25,6 +25,14 @@ from framework.agents.base import (
     ReflectionDecision,
     ToolDecision,
 )
+from framework.guardrails.content_safety import (
+    CategoryAnalysis,
+    ContentSafetyClient,
+    ContentSafetyError,
+    ContentSafetyResult,
+    HarmCategory,
+    Severity,
+)
 from framework.guardrails.schema import SchemaValidationError
 from framework.observability.events import (
     AgentEventEmitter,
@@ -483,3 +491,174 @@ async def test_validation_failed_event_truncates_long_error_lists() -> None:
     # ValidationError import is sanity — proves the type is reachable
     # from the helper's perspective (the helper accepts it).
     assert ValidationError is not None
+
+
+# ---------- Phase 4 batch 3: Content Safety input + output gates ----------
+
+
+def _allow_all() -> ContentSafetyResult:
+    """All-SAFE fixture — agent runs normally through this verdict."""
+    return ContentSafetyResult(
+        categories=[CategoryAnalysis(category=c, severity=Severity.SAFE) for c in HarmCategory]
+    )
+
+
+def _block_at(
+    category: HarmCategory = HarmCategory.HATE,
+    severity: Severity = Severity.HIGH,
+) -> ContentSafetyResult:
+    """Build a BLOCK fixture flagging one category at the given severity."""
+    return ContentSafetyResult(
+        categories=[
+            CategoryAnalysis(category=category, severity=severity),
+            *[
+                CategoryAnalysis(category=c, severity=Severity.SAFE)
+                for c in HarmCategory
+                if c != category
+            ],
+        ]
+    )
+
+
+class _StubContentSafetyClient(ContentSafetyClient):
+    """Test double — returns scripted ``ContentSafetyResult``\\s.
+
+    Subclasses :class:`ContentSafetyClient` so its type satisfies
+    ``AgentBase.__init__``'s ``content_safety`` parameter without
+    casting. ``check_text`` is fully overridden, so the parent's
+    lazy-init machinery never fires — no SDK import, no auth, no
+    network. Use ``calls`` to assert what was checked + in what order.
+    """
+
+    def __init__(self, *responses: ContentSafetyResult) -> None:
+        super().__init__()
+        self._scripted = list(responses)
+        self.calls: list[str] = []
+
+    async def check_text(self, text: str) -> ContentSafetyResult:
+        self.calls.append(text)
+        if self._scripted:
+            return self._scripted.pop(0)
+        # Default: ALLOW once the script is exhausted — matches the
+        # client's own degraded fail-open behavior.
+        return _allow_all()
+
+
+async def test_input_gate_safe_input_runs_normally() -> None:
+    """SAFE input verdict produces the canonical six-event happy path —
+    GUARDRAIL_BLOCKED never fires, ContentSafetyError never raises."""
+    emitter, sink = _make_emitter_with_sink()
+    cs = _StubContentSafetyClient(_allow_all(), _allow_all())
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    ]
+    # Both gates fired: input check_text + output check_text
+    assert cs.calls == ["hello", "HELLO"]
+
+
+async def test_input_gate_blocked_raises_content_safety_error_no_plan_start() -> None:
+    """BLOCKed input raises ContentSafetyError BEFORE the agent loop
+    starts. PLAN_START never fires; only the GUARDRAIL_BLOCKED event
+    lands in the sink."""
+    emitter, sink = _make_emitter_with_sink()
+    cs = _StubContentSafetyClient(_block_at(HarmCategory.HATE, Severity.HIGH))
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    with pytest.raises(ContentSafetyError) as excinfo:
+        await agent.run("flagged input", session_id="s1")
+    assert excinfo.value.gate == "input"
+    assert excinfo.value.blocking_categories == [HarmCategory.HATE]
+    assert excinfo.value.severity is Severity.HIGH
+    # Only ONE event — GUARDRAIL_BLOCKED — was emitted. Specifically:
+    # no PLAN_START, no plan/route/reflect/tool/complete.
+    types = [e.type for e in sink.events]
+    assert types == [AgentEventType.GUARDRAIL_BLOCKED]
+    payload = sink.events[0].payload
+    assert payload["gate"] == "input"
+    assert payload["categories"] == ["Hate"]
+    assert payload["severity"] == Severity.HIGH.value
+    assert payload["severity_name"] == "HIGH"
+    # Only input check_text was called — output never got a chance
+    assert cs.calls == ["flagged input"]
+
+
+async def test_output_gate_blocked_replaces_answer_and_emits_event() -> None:
+    """BLOCKed output replaces ``final_answer`` with a redaction notice
+    AND emits GUARDRAIL_BLOCKED. COMPLETE still fires (the run is done;
+    only the answer is unsafe to surface)."""
+    emitter, sink = _make_emitter_with_sink()
+    # Input ALLOW, output BLOCK
+    cs = _StubContentSafetyClient(
+        _allow_all(),
+        _block_at(HarmCategory.VIOLENCE, Severity.MEDIUM),
+    )
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    final_state = await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    # GUARDRAIL_BLOCKED appears AFTER REFLECT (run is done) and
+    # immediately before COMPLETE.
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.GUARDRAIL_BLOCKED,
+        AgentEventType.COMPLETE,
+    ]
+    blocked = next(e for e in sink.events if e.type is AgentEventType.GUARDRAIL_BLOCKED)
+    assert blocked.payload["gate"] == "output"
+    assert blocked.payload["categories"] == ["Violence"]
+    assert blocked.payload["severity_name"] == "MEDIUM"
+    # COMPLETE carries the redaction notice, not the agent's answer.
+    complete = next(e for e in sink.events if e.type is AgentEventType.COMPLETE)
+    answer = complete.payload["final_answer"]
+    assert "redacted by safety filters" in answer
+    assert "Violence" in answer
+    assert "MEDIUM" in answer
+    # final_state.final_answer is also the redaction — Chainlit sees the
+    # redacted text via state, not the agent's raw answer.
+    assert final_state["final_answer"] == answer
+
+
+async def test_no_content_safety_phase_3_behavior_preserved() -> None:
+    """``content_safety=None`` (default) → identical to Phase 3. This is
+    the backward-compatibility contract for every existing test."""
+    emitter, sink = _make_emitter_with_sink()
+    # No content_safety supplied — Phase 3 path
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry())
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    ]
+
+
+async def test_input_gate_at_low_severity_does_not_block() -> None:
+    """SAFE/LOW verdicts fall under the MEDIUM block threshold; the
+    agent runs normally even with non-zero severity readings."""
+    emitter, sink = _make_emitter_with_sink()
+    # All categories LOW — below the MEDIUM block threshold
+    low_reading = ContentSafetyResult(
+        categories=[CategoryAnalysis(category=c, severity=Severity.LOW) for c in HarmCategory]
+    )
+    cs = _StubContentSafetyClient(low_reading, low_reading)
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types[-1] is AgentEventType.COMPLETE

@@ -51,6 +51,7 @@ import json
 import logging
 from typing import Any
 
+from framework.guardrails.content_safety import ContentSafetyError
 from framework.observability.events import AgentEvent, AgentEventType
 
 logger = logging.getLogger(__name__)
@@ -74,14 +75,28 @@ class ChainlitSink:
         Override for the imported ``chainlit`` package — lets tests inject
         a stand-in module without installing Chainlit's runtime. Defaults
         to ``import chainlit``.
+    langfuse_host:
+        Langfuse Cloud host URL (e.g. ``https://cloud.langfuse.com``). When
+        supplied, the COMPLETE handler appends a "🔗 View full trace in
+        Langfuse" link to the agent's reply, pointing at
+        ``{host}/trace/{session_id}``. The Langfuse trace id IS the session
+        id (1:1 mapping established in :mod:`framework.observability.langfuse`),
+        so the link is constructed locally — no round-trip to Langfuse to
+        resolve a trace URL. Pass ``None`` (default) to suppress the link.
     """
 
-    def __init__(self, *, chainlit_module: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        chainlit_module: Any = None,
+        langfuse_host: str | None = None,
+    ) -> None:
         if chainlit_module is None:
             import chainlit as cl  # imported here so tests don't need chainlit
 
             chainlit_module = cl
         self._cl = chainlit_module
+        self._langfuse_host = langfuse_host.rstrip("/") if langfuse_host else None
         # In-flight steps awaiting their COMPLETE/RESULT counterpart.
         self._open_steps: dict[str, Any] = {}
 
@@ -173,8 +188,18 @@ class ChainlitSink:
         step.output = str(final_answer)
         await step.send()
         await step.update()
-        # The final answer also surfaces as the agent's top-level message.
+        # The final answer surfaces as the agent's top-level message.
+        # When Langfuse is configured, append a "View full trace" link
+        # below the answer (separate message so the agent's answer stays
+        # clean and copy-pasteable). The link is constructed locally
+        # from session_id — the trace id IS the session id, no round-
+        # trip to Langfuse needed.
         await self._cl.Message(content=str(final_answer)).send()
+        if self._langfuse_host is not None:
+            trace_url = f"{self._langfuse_host}/trace/{event.session_id}"
+            await self._cl.Message(
+                content=f"🔗 [View full trace in Langfuse]({trace_url})",
+            ).send()
 
     # ----- error surfacing (called by app.py on agent.run() exception) -----
 
@@ -186,8 +211,20 @@ class ChainlitSink:
 
         * the failed step name + ``is_error=True`` + the exception class +
           message in its output (so they can see WHICH step failed and why);
-        * a top-level :class:`cl.Message` with ``"❌ <ErrorClass>: <msg>"``.
+        * a top-level :class:`cl.Message` with the user-facing error text.
+
+        Special case for :class:`ContentSafetyError`: the input gate fires
+        BEFORE PLAN_START, so ``_open_steps`` is empty and a raw
+        ``"❌ ContentSafetyError: ..."`` reads as a crash rather than a
+        policy decision. Detect the type and render a friendly message
+        with the flagged categories + severity, matching the same
+        register as the output-gate redaction notice from
+        :mod:`framework.agents.base`.
         """
+        if isinstance(error, ContentSafetyError):
+            await self._render_content_safety_block(error)
+            return
+
         error_label = f"{type(error).__name__}: {error}"
         for key, step in list(self._open_steps.items()):
             try:
@@ -204,6 +241,40 @@ class ChainlitSink:
             await self._cl.Message(content=f"❌ **{error_label}**").send()
         except Exception:
             logger.exception("ChainlitSink could not post the top-level error message")
+
+    async def _render_content_safety_block(self, error: ContentSafetyError) -> None:
+        """Friendly UI for a Content-Safety-blocked input.
+
+        The block fires before PLAN_START so there are no open steps to
+        mark; the user just sees a single ``cl.Message`` explaining what
+        was flagged and how to recover. Wording stays in the same
+        register as the output-gate redaction notice (agent-voice,
+        actionable) so the input + output gate UX is consistent.
+        """
+        cats = ", ".join(c.value for c in error.blocking_categories) or "<unknown>"
+        message = (
+            f"⚠️ I can't process that — your message was flagged by safety "
+            f"filters. Categories: **{cats}** (severity={error.severity.name}). "
+            "Please rephrase and try again."
+        )
+        # Self-contained — no open steps to mark (input gate fires before
+        # PLAN_START). If a future caller raises ContentSafetyError mid-
+        # run (output gate doesn't raise, but a custom subclass might),
+        # we still clear any open steps defensively.
+        for key, step in list(self._open_steps.items()):
+            try:
+                step.is_error = True
+                step.output = f"Content Safety block: {cats} ({error.severity.name})"
+                await step.update()
+            except Exception:
+                logger.exception(
+                    "ChainlitSink could not mark open step %s as Content-Safety-blocked", key
+                )
+        self._open_steps.clear()
+        try:
+            await self._cl.Message(content=message).send()
+        except Exception:
+            logger.exception("ChainlitSink could not post the Content-Safety-block message")
 
     # ----- helpers -----
 

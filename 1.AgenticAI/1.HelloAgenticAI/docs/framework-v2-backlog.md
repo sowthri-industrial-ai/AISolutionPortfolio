@@ -14,6 +14,149 @@ Format per entry: **Surfaced in** (which phase noticed it) · **Severity**
 
 ---
 
+## Per-call Content Safety SDK transport retry policy
+
+**Surfaced in:** Phase 4 Batch 2 design discussion.
+
+**Severity:** Low — only relevant under sustained Content Safety
+throttling, which we don't expect in the demo. Today's
+``ContentSafetyClient`` behaviour (per-call ALLOW + warn on transient
+SDK failure, instance stays armed for next call) is correct in
+isolation.
+
+**Workaround in tree:** None needed. Per-call failures fail open,
+which is the deliberate safety/availability trade-off.
+
+**v2 fix sketch:** Configure ``azure-core``'s transport-level retry
+policy on the underlying ``azure.ai.contentsafety.aio.ContentSafetyClient``
+— exponential backoff on 429/503 with 2-3 retries before falling
+through to the ALLOW-and-warn path. ``ContentSafetyClient(retry_policy=
+RetryPolicy(retry_total=3, ...))`` is the documented API. Adds
+latency under throttle but reduces false-negative ALLOWs.
+
+**What it unblocks:** Higher-fidelity guardrails under sustained load
+(e.g. a public demo URL traffic spike). Today's fail-open is fine for
+the portfolio demo; production usage of the framework would want this.
+
+**Migration path:** ~5 lines in ``ContentSafetyClient._ensure_client``:
+construct ``RetryPolicy`` from kwargs, pass to the SDK constructor. No
+public-API change.
+
+---
+
+## Per-gate Content Safety threshold configuration
+
+**Surfaced in:** Phase 4 Batch 3 design discussion.
+
+**Severity:** Low — both gates currently use the same default
+threshold (``Severity.MEDIUM``) and the demo doesn't need different
+policies for input vs output.
+
+**Workaround in tree:** Per-deployment can override via ``.is_blocked(
+threshold=...)`` on the result, but that's a caller-side workaround,
+not a framework-supported configuration.
+
+**v2 fix sketch:** ``AgentBase.__init__`` gains
+``content_safety_input_threshold: Severity = Severity.MEDIUM`` and
+``content_safety_output_threshold: Severity = Severity.MEDIUM`` as
+separate keyword-only params. ``_enforce_input_gate`` and
+``_enforce_output_gate`` use the respective threshold when calling
+``result.is_blocked()``. Backward compatible — defaults match today.
+
+**What it unblocks:** Asymmetric policy. Useful when input policy
+should be stricter than output policy (users can rephrase input;
+the model's output is final and rephrase isn't an option). Or vice
+versa for highly-regulated outputs.
+
+**Migration path:** ~10 lines on ``AgentBase``, no caller changes
+unless they want non-default thresholds. Add one test per non-default
+threshold case in ``framework/agents/test_base.py``.
+
+---
+
+## Cross-service distributed tracing via *_START/*_COMPLETE span pairing
+
+**Surfaced in:** Phase 4 Batch 4 design discussion (events-as-spans
+decision in ``AppInsightsSink``).
+
+**Severity:** Low — single-Container-App today; the agent doesn't
+call external services that would benefit from distributed-trace
+propagation.
+
+**Workaround in tree:** None needed. ``AppInsightsSink`` and
+``LangfuseSink`` both emit short-lived spans whose real duration is
+in the ``duration_ms`` attribute — sufficient for the workbook's
+latency charts.
+
+**v2 fix sketch:** ``AppInsightsSink`` (and ``LangfuseSink``) keep
+``Span`` objects alive across ``*_START`` and ``*_COMPLETE`` event
+pairs, indexed by ``(session_id, node)``. Start spans on ``PLAN_START``
+/ ``TOOL_CALL``, end them on ``PLAN_COMPLETE`` / ``TOOL_RESULT`` with
+the AgentEvent's ``timestamp``. This lets the agent's plan / tool /
+reflect spans participate in the distributed trace of the Container
+App's incoming HTTP request, so App Insights' transaction view shows
+the full request → agent → tool → response chain. Requires
+``AgentEventEmitter`` to surface "start with parent context" + "end
+by reference" semantics if we want trace context propagation
+automatically. May also benefit from W3C Trace Context (``traceparent``
+header) propagation if the agent starts calling external services
+through identifiable RPC.
+
+**What it unblocks:** Distributed-tracing UI in Azure Portal. Real
+value when we have agents-calling-agents, or agents calling external
+services through identifiable RPC. Also makes the App Insights
+workbook's latency breakdown more accurate (span duration becomes
+authoritative instead of an attribute readback).
+
+**Migration path:** Bigger — requires rethinking ``EventSink`` to
+support span lifecycle, not just point-in-time emit. Best done
+alongside a broader v2 framework refactor.
+
+---
+
+## LangfuseSink: per-session memory cleanup + concurrent same-tool spans
+
+**Surfaced in:** Phase 4 Batch 5 design (in-memory ``_traces`` /
+``_open_spans`` dicts).
+
+**Severity:** Low. Two related issues, both bounded:
+
+* **Memory leak on un-COMPLETE'd sessions.** ``_traces`` grows per
+  session and only drops entries on ``COMPLETE``. A session that
+  crashes mid-run (no COMPLETE) leaks until process restart. For
+  Chainlit-style short sessions this is harmless (container restarts
+  daily; entries are tiny). For a long-running daemon, the dict
+  could accumulate over months.
+* **Concurrent same-tool span collision.** ``_open_spans`` is keyed
+  by ``(session_id, f"tool:{node}")``. Two concurrent ``TOOL_CALL``s
+  on the same node within one session would both write to the same
+  key, losing the first span reference. Doesn't happen today (the
+  agent loop is strictly sequential per session), but a future
+  parallel-tool agent would hit this.
+
+**Workaround in tree:** None needed for the demo. The bounded
+lifetime (Chainlit chat sessions, sequential tool calls) makes both
+issues theoretical for v1.
+
+**v2 fix sketch:** TTL-based cleanup — keep a ``last_seen_at``
+timestamp per session entry, sweep entries older than N minutes on
+each emit (or via a periodic background task). For the span
+collision, key ``_open_spans`` by ``(session_id, span_id_from_event)``
+instead of ``(session_id, node)`` — requires AgentBase to assign a
+unique span id at ``*_START`` time and carry it through to the
+matching ``*_COMPLETE`` event. The Langfuse SDK already supports
+arbitrary span ids; we'd need ``AgentEvent`` to carry one.
+
+**What it unblocks:** Long-running daemon agents without sink memory
+growth; parallel-tool agents that fan out to multiple shops at once.
+
+**Migration path:** TTL cleanup is ~20 lines in ``LangfuseSink`` (and
+the same pattern in ``AppInsightsSink`` once distributed tracing
+lands, see entry above). Concurrent-tool keying is a wider change
+that needs ``AgentEvent.span_id: str | None`` and AgentBase wiring.
+
+---
+
 ## Cherry variant SKU not always picked by planner
 
 **Surfaced in:** Phase 3 live smoke test on the deployed URL — *"Find

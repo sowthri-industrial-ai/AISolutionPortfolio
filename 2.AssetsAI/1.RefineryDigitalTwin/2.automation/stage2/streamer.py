@@ -250,9 +250,20 @@ class Streamer:
         self.cumulative_perturbations_applied = 0
         self.cumulative_perturbations_failed = 0
 
-    def log(self, msg):
+    def log(self, msg, level=None):
+        """Emit one log line to stdout + streamer.log.
+
+        `level` is an optional severity tag — when set ("INFO", "WARN",
+        "ERROR"), it's prepended to the message so operators can grep:
+            [<UTC>] WARN: <message>
+        Default (level=None) keeps the original single-line shape that
+        Stages 1+2 have always emitted, so cycle log lines stay diffable
+        against historical streamer.log."""
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-        line = f"[{ts}] {msg}"
+        if level:
+            line = f"[{ts}] {level}: {msg}"
+        else:
+            line = f"[{ts}] {msg}"
         print(line, flush=True)
         if self.log_fp:
             self.log_fp.write(line + "\n")

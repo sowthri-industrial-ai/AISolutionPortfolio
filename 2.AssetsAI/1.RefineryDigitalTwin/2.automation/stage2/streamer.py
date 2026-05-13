@@ -94,11 +94,16 @@ def rset(obj, name, value):
 #                     recomputing (Pump.Efficiency, Heater.DeltaP, column
 #                     tolerances, etc.)
 #
-#   reflection_int  → rset(obj, name, int(value))
+#   reflection_int  → rset(obj, name, System.Int32(int(value)))
 #                     control integers the solver respects (Recycle's
-#                     MaximumIterations); Python int → .NET Int32 needs an
-#                     explicit cast because pythonnet won't auto-convert
-#                     PyInt into Int32 via reflection.
+#                     MaximumIterations). pythonnet 3.0.5 does NOT
+#                     auto-convert PyInt → .NET Int32 through
+#                     PropertyInfo.SetValue — the property setter raises
+#                     ArgumentException. Wrapping with System.Int32(...)
+#                     gives the runtime the explicit .NET type to box.
+#                     `float()` for Double-typed properties works without
+#                     this wrapper (pythonnet boxes Python float as .NET
+#                     Double natively); only int → Int32 needs the cast.
 #
 #   calc_mode       → rset CalcMode enum first, then rset target value.
 #                     Heater inputs are gated by CalcMode; setting OutletT
@@ -166,11 +171,14 @@ WRITE_STRATEGIES: dict = {
 
 def _apply_strategy(obj, property_key, value, strategy_name, strategy_params):
     """Dispatch a single write strategy. Returns (ok, error_message).
-    Always float()/int() at the .NET boundary per operator's universal rule."""
+    Always coerce to the right .NET type at the boundary per operator's
+    universal rule: float(value) for Doubles (pythonnet boxes natively),
+    System.Int32(int(value)) for Int32 (PyInt won't auto-convert)."""
     if strategy_name == "reflection":
         return rset(obj, property_key, float(value))
     if strategy_name == "reflection_int":
-        return rset(obj, property_key, int(value))
+        from System import Int32
+        return rset(obj, property_key, Int32(int(value)))
     if strategy_name == "calc_mode":
         # Set CalcMode enum first (int value), then write target as float.
         calcmode_int = int(strategy_params[0])

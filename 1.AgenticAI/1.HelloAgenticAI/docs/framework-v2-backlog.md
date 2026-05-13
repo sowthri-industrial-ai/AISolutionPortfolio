@@ -157,6 +157,36 @@ that needs ``AgentEvent.span_id: str | None`` and AgentBase wiring.
 
 ---
 
+## Surface Langfuse SDK auth failures synchronously at init
+
+**Surfaced in:** Phase 4 Batch 8 — `LangfuseSink` reported "init succeeded" (no warning logs from our wrapper) but Langfuse Cloud rejected every subsequent trace POST with 401 (the KV-stored API keys had literal angle brackets wrapping the values, a user-side data-entry error). The failure was completely invisible to our wrapper because Langfuse Python SDK's 401 errors fire in a background thread (the SDK queues spans + flushes asynchronously) and don't propagate to our `try/except` around the constructor or per-emit code paths.
+
+**Severity:** Medium — lazy-init's fail-open is the right policy at the framework level (agent must not crash on observability misconfiguration), but **"client construction succeeded" should imply "client can actually authenticate."** Today's contract violates that implication for Langfuse specifically. We discovered the auth failure only by clicking the trace URL in Chainlit and seeing "Trace not found" — which is exactly the kind of silent-failure-then-user-discovery loop the lazy-init pattern was supposed to prevent.
+
+**Workaround in tree:** None today. Diagnose by:
+1. Clicking the trace URL in Chainlit
+2. Seeing "Trace not found"
+3. Inspecting the KV-stored secrets manually to verify the values are well-formed
+4. (Optional) Running a one-shot `langfuse.auth_check()` from a local Python REPL with the same keys
+
+This is too many manual steps for a production demo URL. We need a startup-time signal.
+
+**v2 fix sketch:** After `Langfuse(public_key=..., secret_key=..., host=...)` constructor returns, call `langfuse.auth_check()` synchronously inside `_ensure_client()` and before the lock is released. If it raises or returns `False`, mark the sink failed at init time so:
+
+* The `is_armed` property correctly returns `False`.
+* Chainlit's "🔗 View full trace in Langfuse" link is suppressed (currently it renders unconditionally if `LANGFUSE_HOST` is set, which is misleading when auth has failed).
+* The container log contains a clear warning at startup, before any user clicks a broken link.
+
+Verify the actual SDK method name — Langfuse v2.60.10 exposes a sync `auth_check()` (per the SDK signature we inspected during Batch 5); v3 may have renamed it. Pin the version check.
+
+**Alternative (broader):** Surface SDK background-thread errors via a polling collector — hook into the Langfuse SDK's internal logger and re-emit any 401/403 at our wrapper's WARNING level. Same effect, more general (catches transient auth failures post-init too), but more intrusive.
+
+**What it unblocks:** Bad credentials surface at deploy/restart time, not at "user clicked the trace link and got Trace-not-found". Halves the diagnose-loop for the most common Langfuse configuration mistake (typo, copy-paste error, stale rotation).
+
+**Migration path:** ~5 lines in `LangfuseSink._ensure_client()`. Plus 1 new test for the auth-check-fails-at-init path (mock the SDK's `auth_check()` to return `False`, verify `_init_failed` becomes `True`, verify the same `events will be silently dropped` warning fires). Plus a Chainlit-side update to gate the trace link on `langfuse_sink.is_armed` instead of just `langfuse_host` being set — but that requires plumbing the sink reference into the Chainlit app, which is a slightly bigger touch.
+
+---
+
 ## Cost-trend workbook chart + token usage emission
 
 **Surfaced in:** Phase 4 Batch 7 — workbook deliverable scope.

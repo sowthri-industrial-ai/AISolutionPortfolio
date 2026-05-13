@@ -1,0 +1,91 @@
+{
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json",
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "name": "header",
+      "content": {
+        "json": "# HelloAgenticAI — Agent Observability\n\nLive operational dashboard for the fruit-market agent runs.\n\nData source: the `requests` table, populated by `AppInsightsSink` (Phase 4 batch 4). Each `AgentEvent` becomes a short-lived OpenTelemetry span whose `name` is the event type (`plan_start`, `tool_call`, `schema_validation_failed`, `guardrail_blocked`, etc.). The span's `customDimensions` carry `session_id`, `node`, `duration_ms`, and the flattened payload under `payload.*` keys.\n\nThe span's own duration is a near-zero with-block scope; **always read the real duration from `customDimensions.duration_ms`** (toint() coercion needed). See ADR-0003 risk #8 for the rationale on events-as-spans vs. customEvents."
+      }
+    },
+    {
+      "type": 3,
+      "name": "runs-24h",
+      "content": {
+        "version": "KqlItem/1.0",
+        "size": 4,
+        "title": "Agent runs (last 24h)",
+        "query": "requests\n| where timestamp > ago(24h)\n| where name == \"complete\"\n| summarize Count = count()",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "Count", "formatter": 1 },
+          "showBorder": false
+        }
+      }
+    },
+    {
+      "type": 3,
+      "name": "events-per-minute",
+      "content": {
+        "version": "KqlItem/1.0",
+        "size": 0,
+        "title": "Events per minute by type",
+        "query": "requests\n| where timestamp > ago(24h)\n| where name in (\"plan_start\", \"plan_complete\", \"tool_call\", \"tool_result\", \"reflect\", \"complete\", \"schema_validation_failed\", \"guardrail_blocked\")\n| summarize count() by bin(timestamp, 1m), name\n| render timechart",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "latency-p50-p95",
+      "content": {
+        "version": "KqlItem/1.0",
+        "size": 0,
+        "title": "Plan-to-complete latency (p50 / p95, 5-min buckets)",
+        "query": "let runs =\n    requests\n    | where timestamp > ago(24h)\n    | where name in (\"plan_start\", \"complete\")\n    | extend session_id = tostring(customDimensions.session_id)\n    | summarize start_t = minif(timestamp, name == \"plan_start\"),\n                end_t   = minif(timestamp, name == \"complete\")\n              by session_id\n    | where isnotnull(start_t) and isnotnull(end_t)\n    | extend duration_ms = todouble(end_t - start_t) / 1ms;\nruns\n| summarize p50 = percentile(duration_ms, 50),\n            p95 = percentile(duration_ms, 95)\n          by bin(end_t, 5m)\n| render timechart",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "top-schema-validation-failures",
+      "content": {
+        "version": "KqlItem/1.0",
+        "size": 0,
+        "title": "Top 5 schema-validation failures by Pydantic model",
+        "query": "requests\n| where timestamp > ago(24h)\n| where name == \"schema_validation_failed\"\n| extend model = tostring(customDimensions[\"payload.model\"])\n| extend node = tostring(customDimensions.node)\n| summarize failures = count() by model, node\n| top 5 by failures desc",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "top-guardrail-blocks",
+      "content": {
+        "version": "KqlItem/1.0",
+        "size": 0,
+        "title": "Top 5 Content Safety blocks by gate + categories",
+        "query": "requests\n| where timestamp > ago(24h)\n| where name == \"guardrail_blocked\"\n| extend gate = tostring(customDimensions[\"payload.gate\"])\n| extend categories = tostring(customDimensions[\"payload.categories\"])\n| extend severity_name = tostring(customDimensions[\"payload.severity_name\"])\n| summarize blocks = count() by gate, categories, severity_name\n| top 5 by blocks desc",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 1,
+      "name": "cost-trend-placeholder",
+      "content": {
+        "json": "## Cost trend — deferred to framework-v2\n\nThe cost-trend chart was scoped in the Phase 4 kickoff but required surfacing `response.usage` from `AzureOpenAIClient.chat_structured` AND threading it into the AgentEvent payload via an AgentBase hook + 3 emit-site updates + tests + workbook KQL. Estimated at >30 min (the kickoff's defer threshold), so it landed on the framework-v2 mental shelf instead.\n\nFollow-on work: see `docs/framework-v2-backlog.md`. When that ships, a `requests | where name == \"plan_complete\" or name == \"reflect\" | extend tokens = toint(customDimensions[\"payload.usage.total_tokens\"]) | summarize sum_tokens = sum(tokens) by bin(timestamp, 1h)` query slots in here."
+      }
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "sentinel-UserWorkbook"
+}

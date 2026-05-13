@@ -33,6 +33,15 @@ param openAiEndpoint string
 @description('Cosmos endpoint (https://<name>.documents.azure.com:443/) — injected as AZURE_COSMOS_ENDPOINT for DefaultAzureCredential-based clients.')
 param cosmosEndpoint string
 
+@description('Content Safety endpoint (https://<name>.cognitiveservices.azure.com/) — injected as AZURE_CONTENT_SAFETY_ENDPOINT for the input/output guardrail gates. Phase 4 batch 7.')
+param contentSafetyEndpoint string
+
+@description('Key Vault URI (https://<name>.vault.azure.net/) — injected as AZURE_KEY_VAULT_ENDPOINT so LangfuseSink can fetch its three Langfuse secrets on first emit. Phase 4 batch 7.')
+param keyVaultEndpoint string
+
+@description('App Insights connection string — injected as APPLICATIONINSIGHTS_CONNECTION_STRING (the canonical name the OpenTelemetry Azure Monitor exporter auto-discovers). Phase 4 batch 7. Long opaque blob containing InstrumentationKey + IngestionEndpoint; not a secret per Microsoft guidance but treated with care.')
+param appInsightsConnectionString string
+
 @description('Container image, supplied from main.bicep (sourced from SERVICE_AGENT_IMAGE_NAME via main.parameters.json on every provision, falling back to the quickstart placeholder pre-first-deploy). NOT defaulted here — the source of truth is the parameter substitution, not a stale local default. A local default here would silently mask a missing azd output and revert the image to the placeholder on any solo `azd provision` (the bug that landed Phase 3 momentarily on the wrong binary; see ADR-0003 risk #4).')
 param image string
 
@@ -78,6 +87,22 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           identity: identityResourceId
         }
       ]
+      // Container Apps' KV-secret-reference. The platform pulls the
+      // secret from Key Vault at provision time using the user-assigned
+      // managed identity (which already holds Key Vault Secrets User
+      // via the keyvault module). The `secrets` entry is a LOCAL alias
+      // that env vars below reference via `secretRef` — keeps the env
+      // block free of inline URIs.
+      // Required pre-condition: the `langfuse-host` secret must exist
+      // in the vault before this provision; populated out-of-band per
+      // Phase 4 kickoff. Phase 4 batch 7.
+      secrets: [
+        {
+          name: 'langfuse-host'
+          keyVaultUrl: '${keyVaultEndpoint}secrets/langfuse-host'
+          identity: identityResourceId
+        }
+      ]
     }
     template: {
       containers: [
@@ -93,6 +118,19 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CONTAINER_APP_NAME', value: name }
             { name: 'AZURE_OPENAI_ENDPOINT', value: openAiEndpoint }
             { name: 'AZURE_COSMOS_ENDPOINT', value: cosmosEndpoint }
+            // Phase 4 batch 7 — observability + guardrails wiring. Each
+            // env var corresponds to a "build-this-component-if-set"
+            // env-driven slot in demo_fruitmarket/graph.py. Missing →
+            // component skipped → Phase 3 behaviour preserved.
+            { name: 'AZURE_CONTENT_SAFETY_ENDPOINT', value: contentSafetyEndpoint }
+            { name: 'AZURE_KEY_VAULT_ENDPOINT', value: keyVaultEndpoint }
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
+            // LANGFUSE_HOST sourced from KV via the `secrets` entry
+            // above. Read by demo_fruitmarket/ui/app.py and threaded
+            // into ChainlitSink for the trace-link UI; the LangfuseSink
+            // itself fetches public/secret keys + host from KV
+            // independently at first-emit time.
+            { name: 'LANGFUSE_HOST', secretRef: 'langfuse-host' }
           ]
           // TCP probes (not HTTP /health). Phase 1's placeholder app served
           // /health, but the Phase 3 Chainlit app doesn't expose a /health

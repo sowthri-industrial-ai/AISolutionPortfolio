@@ -157,6 +157,61 @@ that needs ``AgentEvent.span_id: str | None`` and AgentBase wiring.
 
 ---
 
+## Cost-trend workbook chart + token usage emission
+
+**Surfaced in:** Phase 4 Batch 7 — workbook deliverable scope.
+
+**Severity:** Low — not load-bearing for the "observable agent"
+framing; the four charts that shipped in Batch 7 (events-per-minute,
+plan-to-complete latency p50/p95, top schema-validation failures,
+top guardrail blocks) cover the operational questions a portfolio
+demo viewer would actually ask.
+
+**Workaround in tree:** The workbook section for cost trend is in
+place as a placeholder markdown item (see
+``infra/workbooks/agent-observability.workbook.json``, ``name:
+cost-trend-placeholder``). The shape is ready to receive the data
+source once it ships; no further workbook-layout work needed.
+
+**v2 fix sketch:**
+
+* ~10 lines in :mod:`framework.llm.azure_openai` to track
+  ``_last_usage`` as a property after each ``.parse()`` /
+  ``.create()`` call, exposing
+  ``{prompt_tokens, completion_tokens, total_tokens}``.
+* ~20 lines in :mod:`framework.agents.base` to add a
+  ``_get_last_llm_usage()`` hook method (default returns ``None``)
+  called from the three emit sites (``_plan_node``, ``_tool_node``,
+  ``_reflect_node``) and conditionally merged into the event payload
+  under ``payload.usage``.
+* ~3 lines in :class:`FruitMarketAgent` to override the hook and
+  return ``self._llm.last_usage``.
+* ~5-7 new tests covering: hook returning usage, hook returning
+  None, usage merged into the right event types, absent-usage case
+  (back-compat for subclasses that don't override).
+* Workbook KQL: a token-sum-per-session timechart joining
+  ``payload.usage.total_tokens`` across the events for each session,
+  binned by hour. ~10 lines of KQL replacing the placeholder
+  markdown item.
+* One re-provision pass to land the updated workbook JSON
+  (Bicep itself unchanged — ``loadTextContent`` picks up the new
+  file).
+
+**What it unblocks:** Real cost visibility for demo runs. Useful
+when actual usage numbers become a question (e.g., "how much did
+the demo run yesterday cost?", "which prompt is burning the most
+tokens?", "is the gpt-4o vs gpt-4o-mini split delivering the
+expected cost ratio?"). Also feeds Phase 5's eval-scoring needs
+(token-cost-per-correct-answer is a useful metric).
+
+**Migration path:** ~45-60 min of cross-cutting plumbing + one
+workbook re-deploy. Best landed alongside Phase 5's eval harness —
+which independently needs per-event token counts for scoring, so
+the underlying wiring is shared and the integration cost amortises
+across two deliverables.
+
+---
+
 ## Cherry variant SKU not always picked by planner
 
 **Surfaced in:** Phase 3 live smoke test on the deployed URL — *"Find

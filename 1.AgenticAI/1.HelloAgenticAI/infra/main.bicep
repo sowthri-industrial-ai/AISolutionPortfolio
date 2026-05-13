@@ -191,7 +191,28 @@ module containerApp 'modules/container-app.bicep' = {
     registryServer: registry.outputs.loginServer
     openAiEndpoint: openai.outputs.endpoint
     cosmosEndpoint: cosmos.outputs.endpoint
+    contentSafetyEndpoint: contentsafety.outputs.endpoint
+    keyVaultEndpoint: keyvault.outputs.uri
+    appInsightsConnectionString: observability.outputs.appInsightsConnectionString
     image: containerImage
+  }
+}
+
+// Phase 4 deliverable 5 — App Insights workbook for the operational
+// dashboard demo link. Workbook JSON is hand-authored in
+// `infra/workbooks/agent-observability.workbook.json` and loaded at
+// template-compile time. Cost-trend chart deferred to framework-v2 per
+// the kickoff 30-min threshold; see the workbook JSON's placeholder
+// section + framework-v2-backlog.md.
+module workbook 'modules/workbook.bicep' = {
+  scope: rg
+  name: 'workbook-agent-observability'
+  params: {
+    displayName: 'HelloAgenticAI Agent Observability'
+    appInsightsResourceId: observability.outputs.appInsightsId
+    workbookJsonContent: loadTextContent('workbooks/agent-observability.workbook.json')
+    location: location
+    tags: tags
   }
 }
 
@@ -215,9 +236,16 @@ output AZURE_KEY_VAULT_NAME string = keyvault.outputs.name
 
 output AZURE_APPLICATIONINSIGHTS_CONNECTION_STRING string = observability.outputs.appInsightsConnectionString
 output AZURE_LOG_ANALYTICS_WORKSPACE_NAME string = observability.outputs.logAnalyticsName
+output AZURE_APPLICATION_INSIGHTS_ID string = observability.outputs.appInsightsId
 
 output AZURE_CONTENT_SAFETY_ENDPOINT string = contentsafety.outputs.endpoint
 output AZURE_CONTENT_SAFETY_NAME string = contentsafety.outputs.name
+
+// Phase 4 batch 7 — Workbook resource id. README's "operational dashboard"
+// link is constructed as
+// https://portal.azure.com/#@/resource/{workbookId}
+output AZURE_WORKBOOK_ID string = workbook.outputs.id
+output AZURE_WORKBOOK_NAME string = workbook.outputs.name
 
 output AZURE_STORAGE_BLOB_ENDPOINT string = storage.outputs.blobEndpoint
 output AZURE_STORAGE_NAME string = storage.outputs.name

@@ -1,0 +1,54 @@
+
+Previewing Azure resource changes (azd provision --preview)
+This is a preview. No changes will be applied to your Azure resources.
+
+Initialize bicep provider
+Reading subscription and location from environment...
+Subscription: Azure subscription 1 (d599c6a3-6859-4aae-8c0e-63674a3b0704)
+Location: Sweden Central
+
+Creating a deployment plan
+Generating infrastructure preview
+  Resources:
+
+  Skip     : Resource group                     : rg-helloagenticai-dev
+  Modify   : Container App                      : ca-agent-dev-zld3sf6mfagdq
+      - properties.configuration.ingress.exposedPort
+      * properties.configuration.registries
+      + properties.configuration.secrets: [{"identity":"/subscriptions/d599c6a3-6859-4aae-8c0e-63674a3b0704/resourceGroups/rg-helloagenticai-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-helloagenticai-dev-zld3sf6mfagdq","keyVaultUrl":"[format('{0}secrets/langfuse-host', reference('/subscriptions/d599c6a3-6859-4aae-8c0e-63674a3b0704/resourceGroups/rg-helloagenticai-dev/providers/Microsoft.KeyVault/vaults/kv-zld3sf6mfagdq', '2023-07-01').vaultUri)]","name":"*******"}]
+      - properties.runningStatus
+      * properties.template.containers
+      - properties.workloadProfileName
+  Modify   : Container Apps Environment         : cae-helloagenticai-dev-zld3sf6mfagdq
+      ~ properties.appLogsConfiguration.logAnalyticsConfiguration.customerId: "2bcbefaa-5127-4026-8daf-5e54fe30d6ea" => "[reference('/subscriptions/d599c6a3-6859-4aae-8c0e-63674a3b0704/resourceGroups/rg-helloagenticai-dev/providers/Microsoft.OperationalInsights/workspaces/log-helloagenticai-dev-zld3sf6mfagdq', '2023-09-01').customerId]"
+      - properties.peerAuthentication
+      - properties.peerTrafficConfiguration
+  Skip     : Azure AI Services                  : aoai-helloai-dev-zld3sf6mfagdq
+  Modify   : Azure AI Services Model Deployment : gpt-4o
+      - properties.currentCapacity
+  Modify   : Azure AI Services Model Deployment : gpt-4o-mini
+      - properties.currentCapacity
+  Modify   : Azure AI Services Model Deployment : text-embedding-3-large
+      - properties.currentCapacity
+  Skip     : Azure AI Services                  : cs-helloai-dev-zld3sf6mfagdq
+  Modify   : Container Registry                 : crhelloaidevzld3sf6mfagdq
+      - properties.dataEndpointEnabled
+      - properties.encryption
+  Modify   : Azure Cosmos DB                    : cosmos-helloai-dev-zld3sf6mfagdq
+      - properties.analyticalStorageConfiguration
+      - properties.defaultIdentity
+      ~ properties.enableAutomaticFailover: true => false
+      - properties.sqlEndpoint
+  Modify   : Application Insights               : appi-helloagenticai-dev-zld3sf6mfagdq
+      + properties.Flow_Type: "Bluefield"
+      + properties.Request_Source: "rest"
+  Modify   : Key Vault                          : kv-zld3sf6mfagdq
+      + properties.networkAcls: {"bypass":"AzureServices","defaultAction":"Allow"}
+  Skip     : Log Analytics workspace            : log-helloagenticai-dev-zld3sf6mfagdq
+  Skip     : Storage account                    : sthelloaidevzld3sf6mfagd
+
+SUCCESS: Generated provisioning preview in 27 seconds.
+You can view the current resources under the resource group rg-helloagenticai-dev in Azure Portal:
+https://portal.azure.com/#@/resource/subscriptions/d599c6a3-6859-4aae-8c0e-63674a3b0704/resourceGroups/rg-helloagenticai-dev/overview
+Update available: 1.24.3 -> 1.25.0 (https://github.com/Azure/azure-dev/releases/tag/azure-dev-cli_1.25.0)
+To update, run `brew uninstall azd && brew install --cask azure/azd/azd`

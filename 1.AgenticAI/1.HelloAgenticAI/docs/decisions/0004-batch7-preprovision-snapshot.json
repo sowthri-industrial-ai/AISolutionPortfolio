@@ -1,0 +1,47 @@
+{
+  "env": [
+    {
+      "name": "AZURE_CLIENT_ID",
+      "value": "84b97f4b-3f8c-4ab1-98d4-900aeec00ef9"
+    },
+    {
+      "name": "CONTAINER_APP_NAME",
+      "value": "ca-agent-dev-zld3sf6mfagdq"
+    },
+    {
+      "name": "AZURE_OPENAI_ENDPOINT",
+      "value": "https://aoai-helloai-dev-zld3sf6mfagdq.openai.azure.com/"
+    },
+    {
+      "name": "AZURE_COSMOS_ENDPOINT",
+      "value": "https://cosmos-helloai-dev-zld3sf6mfagdq.documents.azure.com:443/"
+    }
+  ],
+  "image": "crhelloaidevzld3sf6mfagdq.azurecr.io/helloagenticai/agent-dev:azd-deploy-1778496086",
+  "name": "agent",
+  "probes": [
+    {
+      "failureThreshold": 3,
+      "initialDelaySeconds": 10,
+      "periodSeconds": 30,
+      "tcpSocket": {
+        "port": 8000
+      },
+      "type": "Liveness"
+    },
+    {
+      "failureThreshold": 3,
+      "initialDelaySeconds": 5,
+      "periodSeconds": 10,
+      "tcpSocket": {
+        "port": 8000
+      },
+      "type": "Readiness"
+    }
+  ],
+  "resources": {
+    "cpu": 0.5,
+    "ephemeralStorage": "2Gi",
+    "memory": "1Gi"
+  }
+}

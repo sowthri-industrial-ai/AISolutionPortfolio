@@ -227,17 +227,17 @@ async def test_sinks_satisfy_event_sink_protocol_and_dont_raise() -> None:
     """All Phase 4 sinks satisfy :class:`EventSink` and complete without
     error on the degraded/unconfigured paths.
 
-    The :class:`AppInsightsSink` is constructed with
-    ``connection_string=None`` so it takes the no-connection-string
-    pass-through path (logs a warning, no-ops emit). The real-init
-    behaviour is exercised in
-    :mod:`framework.observability.test_app_insights` with mocked OTel.
-    :class:`LangfuseSink` and :class:`UIStreamSink` are still Phase
-    2-style stubs at this point (batch 5 replaces LangfuseSink)."""
+    Both :class:`AppInsightsSink` and :class:`LangfuseSink` take their
+    ``None``-arg pass-through path (logs a warning, no-ops emit). Real-
+    init behaviour is exercised in
+    :mod:`framework.observability.test_app_insights` and
+    :mod:`framework.observability.test_langfuse` respectively, with
+    mocked SDK boundaries. :class:`UIStreamSink` remains a Phase 2-style
+    stub — the live UI uses :mod:`demo_fruitmarket.ui.chainlit_sink`."""
     e = AgentEvent(session_id="s1", type=AgentEventType.COMPLETE)
     for sink in (
         AppInsightsSink(connection_string=None),
-        LangfuseSink(),
+        LangfuseSink(key_vault_endpoint=None),
         UIStreamSink(),
     ):
         await sink.emit(e)

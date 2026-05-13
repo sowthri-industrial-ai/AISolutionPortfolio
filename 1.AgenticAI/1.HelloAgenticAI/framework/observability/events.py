@@ -19,12 +19,15 @@ Phase 4 adds:
 * :class:`AppInsightsSink` (re-exported from
   :mod:`framework.observability.app_insights`) — real OTel-based App
   Insights ingestion with lazy init.
+* :class:`LangfuseSink` (re-exported from
+  :mod:`framework.observability.langfuse`) — Langfuse Cloud trace +
+  span ingestion with Key Vault-backed lazy init.
 
 The Cosmos sink intentionally lives in :mod:`framework.memory.cosmos`
 because it depends on :class:`CosmosProvider`; importing it here would
 create a layering inversion. The same separation applies to
-:class:`AppInsightsSink` (its own module under
-:mod:`framework.observability`) and :class:`LangfuseSink` (batch 5).
+:class:`AppInsightsSink` and :class:`LangfuseSink` (each in its own
+module under :mod:`framework.observability`).
 """
 
 from __future__ import annotations
@@ -211,27 +214,11 @@ class LoggingSink:
 from framework.observability.app_insights import (  # noqa: E402
     AppInsightsSink as AppInsightsSink,
 )
+from framework.observability.langfuse import (  # noqa: E402
+    LangfuseSink as LangfuseSink,
+)
 
-# ---------- Phase 4 stubs (replaced in batches 5+) ----------
-
-
-class LangfuseSink:
-    """STUB for Phase 4 — Langfuse Cloud ingestion (per ADR-0001).
-
-    Phase 4 will read ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY``
-    from Key Vault and call the Langfuse SDK.
-    """
-
-    def __init__(self) -> None:
-        self._logger = logging.getLogger("agent.events.langfuse.stub")
-
-    async def emit(self, event: AgentEvent) -> None:
-        # TODO(phase4): publish via langfuse SDK.
-        self._logger.debug(
-            "STUB Langfuse emit: %s session=%s",
-            event.type.value,
-            event.session_id,
-        )
+# ---------- Remaining stubs ----------
 
 
 class UIStreamSink:

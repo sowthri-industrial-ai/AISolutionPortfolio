@@ -7,3 +7,7 @@ infra/placeholder/package-lock.json
 
 # F3 Stage 2 perturbation inbox — transient request files, not source
 2.automation/stage2/perturbations_inbox/
+
+# F3 Stage 3 advisory state — runtime mutable, persists across restarts
+2.automation/stage3/advisories.json
+2.automation/stage3/advisories.json.tmp

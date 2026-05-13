@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 # ----- Constants & config -----
@@ -55,6 +55,10 @@ DEFAULT_SETPOINT_DICT = (
 DEFAULT_PERTURBATION_INBOX = (
     "/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/"
     "2.AssetsAI/1.RefineryDigitalTwin/2.automation/stage2/perturbations_inbox"
+)
+DEFAULT_ADVISORY_STORE = (
+    "/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/"
+    "2.AssetsAI/1.RefineryDigitalTwin/2.automation/stage3/advisories.json"
 )
 EXPECTED_TAG_COUNT = 1550
 
@@ -211,6 +215,47 @@ class SetpointWriteResponse(BaseModel):
     )
 
 
+# ----- Advisory models (F3) -----
+
+
+class AdvisoryCreateRequest(BaseModel):
+    setpoint_id: str
+    target_value: float
+    rationale: str = Field(
+        ...,
+        description="Why this change is being recommended. Operator reads this when deciding to approve/reject.",
+    )
+    created_by: Optional[str] = Field(
+        default="agent",
+        description="Caller identifier. Agent sets this to its tool/session ID.",
+    )
+
+
+class AdvisoryApproveRequest(BaseModel):
+    approved_by: Optional[str] = "operator"
+
+
+class AdvisoryRejectRequest(BaseModel):
+    rejected_by: Optional[str] = "operator"
+    reason: Optional[str] = None
+
+
+class Advisory(BaseModel):
+    advisory_id: str
+    setpoint_id: str
+    target_value: float
+    rationale: str
+    state: str  # pending | approved | rejected
+    created_at: str
+    created_by: Optional[str] = None
+    approved_at: Optional[str] = None
+    approved_by: Optional[str] = None
+    rejected_at: Optional[str] = None
+    rejected_by: Optional[str] = None
+    rejected_reason: Optional[str] = None
+    perturbation_request_id: Optional[str] = None
+
+
 # ----- Module state (populated at startup) -----
 
 
@@ -223,11 +268,15 @@ class State:
     perturbation_inbox: Path = Path(
         os.environ.get("PERTURBATION_INBOX", DEFAULT_PERTURBATION_INBOX)
     )
+    advisory_store_path: Path = Path(
+        os.environ.get("ADVISORY_STORE_PATH", DEFAULT_ADVISORY_STORE)
+    )
     tag_dict: dict[str, dict] = {}
     tag_list: list[dict] = []
     ontology: Any = None  # OntologyLoader instance, loaded in lifespan
     setpoint_catalog: Any = None  # SetpointCatalog (perturbations.py)
     inbox_writer: Any = None  # InboxWriter (perturbations.py)
+    advisory_store: Any = None  # AdvisoryStore (advisories.py)
 
 
 def _load_tag_dict() -> None:
@@ -279,11 +328,31 @@ def _load_setpoints_and_inbox() -> None:
     )
 
 
+def _load_advisory_store() -> None:
+    """Instantiate the AdvisoryStore — depends on setpoint_catalog + inbox_writer
+    already being loaded. Persists to JSON, survives restart."""
+    from advisories import AdvisoryStore
+
+    State.advisory_store = AdvisoryStore(
+        State.advisory_store_path,
+        State.setpoint_catalog,
+        State.inbox_writer,
+    )
+    print(
+        f"[stage3] advisory store loaded: "
+        f"{len(State.advisory_store.advisories)} total "
+        f"({State.advisory_store.pending_count()} pending); "
+        f"path={State.advisory_store_path}",
+        flush=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_tag_dict()
     _load_ontology()
     _load_setpoints_and_inbox()
+    _load_advisory_store()
     yield
 
 
@@ -672,6 +741,113 @@ def setpoints_write(setpoint_id: str, req: SetpointWriteRequest) -> SetpointWrit
         status="queued",
         enqueued_at=inbox_request["enqueued_at"],
     )
+
+
+# ----- Advisory endpoints (F3) -----
+
+
+@app.post(
+    "/advisories",
+    response_model=Advisory,
+    status_code=201,
+    tags=["advisories"],
+)
+def advisory_create(req: AdvisoryCreateRequest) -> Advisory:
+    """Create a pending advisory. Same setpoint validation gate as
+    POST /setpoints/{id}/value — 404 on unknown setpoint, 422 on
+    non-perturbable / out-of-bounds / non-numeric."""
+    adv, err, entry = State.advisory_store.create(
+        req.setpoint_id, req.target_value, req.rationale, req.created_by or "agent"
+    )
+    if adv is None:
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "setpoint_not_found", "setpoint_id": req.setpoint_id},
+            )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_failed",
+                "setpoint_id": req.setpoint_id,
+                "reason": err,
+                "perturbable": entry.get("perturbable"),
+                "bounds": entry.get("bounds"),
+                "bounds_kind": entry.get("bounds_kind"),
+                "current_value": entry.get("current_value"),
+            },
+        )
+    return Advisory(**adv)
+
+
+@app.get(
+    "/advisories",
+    response_model=list[Advisory],
+    tags=["advisories"],
+)
+def advisory_list(
+    state: Optional[str] = Query(
+        None,
+        pattern="^(pending|approved|rejected)$",
+        description="Filter by state. Omit to list all.",
+    ),
+) -> list[Advisory]:
+    """List advisories, newest-first. Optional filter by state."""
+    return [Advisory(**a) for a in State.advisory_store.list(state)]
+
+
+@app.post(
+    "/advisories/{advisory_id}/approve",
+    response_model=Advisory,
+    tags=["advisories"],
+)
+def advisory_approve(
+    advisory_id: str,
+    req: AdvisoryApproveRequest = Body(default_factory=AdvisoryApproveRequest),
+) -> Advisory:
+    """Approve a pending advisory: enqueues a perturbation request into
+    Stage 2's inbox using the same atomic-file protocol as direct
+    setpoint writes. Returns the updated advisory with
+    `perturbation_request_id` set.
+
+    Status codes:
+      201 success (returns full Advisory with state="approved")
+      404 advisory_not_found
+      409 already approved or rejected
+      422 setpoint validation failed at approval time (rare; catalog
+          changed between create and approve)
+    """
+    adv, err, status_code = State.advisory_store.approve(
+        advisory_id, req.approved_by or "operator"
+    )
+    if adv is None:
+        raise HTTPException(
+            status_code=status_code or 500,
+            detail={"error": err, "advisory_id": advisory_id},
+        )
+    return Advisory(**adv)
+
+
+@app.post(
+    "/advisories/{advisory_id}/reject",
+    response_model=Advisory,
+    tags=["advisories"],
+)
+def advisory_reject(
+    advisory_id: str,
+    req: AdvisoryRejectRequest = Body(default_factory=AdvisoryRejectRequest),
+) -> Advisory:
+    """Reject a pending advisory; no perturbation enqueued. Same 404/409
+    semantics as approve."""
+    adv, err, status_code = State.advisory_store.reject(
+        advisory_id, req.rejected_by or "operator", req.reason
+    )
+    if adv is None:
+        raise HTTPException(
+            status_code=status_code or 500,
+            detail={"error": err, "advisory_id": advisory_id},
+        )
+    return Advisory(**adv)
 
 
 # ----- Entry point -----

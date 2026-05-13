@@ -48,6 +48,14 @@ DEFAULT_STAGE2_DIR = (
     "/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/"
     "2.AssetsAI/1.RefineryDigitalTwin/4.snapshots/stage2"
 )
+DEFAULT_SETPOINT_DICT = (
+    "/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/"
+    "2.AssetsAI/1.RefineryDigitalTwin/3.probes/phase0a/phase0a_setpoint_dictionary.json"
+)
+DEFAULT_PERTURBATION_INBOX = (
+    "/Users/sowthrisomasundaram/Documents/AISolutionPortfolio/"
+    "2.AssetsAI/1.RefineryDigitalTwin/2.automation/stage2/perturbations_inbox"
+)
 EXPECTED_TAG_COUNT = 1550
 
 # Hour-bucket file naming (mirrors Stage 2 streamer).
@@ -179,15 +187,47 @@ class OntologyResolveResponse(BaseModel):
     results: list[OntologyResolveHit]
 
 
+# ----- Setpoint write models (F3) -----
+
+
+class SetpointWriteRequest(BaseModel):
+    value: float
+    requested_by: Optional[str] = Field(
+        default="stage3_api",
+        description="Free-form caller hint. Agent should set this to its tool/session ID.",
+    )
+
+
+class SetpointWriteResponse(BaseModel):
+    request_id: str
+    setpoint_id: str
+    queued_value: float
+    status: str  # "queued"
+    enqueued_at: str
+    note: str = (
+        "Perturbation queued to Stage 2 inbox; applied at the next solve cycle "
+        "boundary. Inspect <inbox_dir>/<request_id>.applied or .failed for the "
+        "result."
+    )
+
+
 # ----- Module state (populated at startup) -----
 
 
 class State:
     tag_dict_path: Path = Path(os.environ.get("TAG_DICT_PATH", DEFAULT_TAG_DICT))
     stage2_dir: Path = Path(os.environ.get("STAGE2_DIR", DEFAULT_STAGE2_DIR))
+    setpoint_dict_path: Path = Path(
+        os.environ.get("SETPOINT_DICT_PATH", DEFAULT_SETPOINT_DICT)
+    )
+    perturbation_inbox: Path = Path(
+        os.environ.get("PERTURBATION_INBOX", DEFAULT_PERTURBATION_INBOX)
+    )
     tag_dict: dict[str, dict] = {}
     tag_list: list[dict] = []
     ontology: Any = None  # OntologyLoader instance, loaded in lifespan
+    setpoint_catalog: Any = None  # SetpointCatalog (perturbations.py)
+    inbox_writer: Any = None  # InboxWriter (perturbations.py)
 
 
 def _load_tag_dict() -> None:
@@ -221,10 +261,29 @@ def _load_ontology() -> None:
     )
 
 
+def _load_setpoints_and_inbox() -> None:
+    """Load setpoint catalog + create inbox writer (F3 perturbation infra).
+    Local import so importing api.py without the F3 module on path stays cheap."""
+    from perturbations import SetpointCatalog, InboxWriter
+
+    if not State.setpoint_dict_path.is_file():
+        raise RuntimeError(f"setpoint dict not found: {State.setpoint_dict_path}")
+    State.setpoint_catalog = SetpointCatalog(State.setpoint_dict_path)
+    State.inbox_writer = InboxWriter(State.perturbation_inbox)
+    print(
+        f"[stage3] setpoint catalog loaded: "
+        f"{len(State.setpoint_catalog.by_id)} entries "
+        f"({len(State.setpoint_catalog.list_perturbable())} perturbable); "
+        f"inbox at {State.perturbation_inbox}",
+        flush=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_tag_dict()
     _load_ontology()
+    _load_setpoints_and_inbox()
     yield
 
 
@@ -552,6 +611,66 @@ def ontology_resolve(
         term=term,
         count=len(hits),
         results=[OntologyResolveHit(**h) for h in hits],
+    )
+
+
+# ----- Setpoint write endpoint (F3) -----
+
+
+@app.post(
+    "/setpoints/{setpoint_id}/value",
+    response_model=SetpointWriteResponse,
+    tags=["setpoints"],
+)
+def setpoints_write(setpoint_id: str, req: SetpointWriteRequest) -> SetpointWriteResponse:
+    """Queue a perturbation request to Stage 2's inbox. Stage 2 applies at
+    the next solve cycle boundary; the next snapshot will reflect the new
+    value.
+
+    Validation gate (Q3 default (b) — perturbable list + bounds check):
+      - 404 if setpoint_id is unknown
+      - 422 if setpoint is non-perturbable
+      - 422 if value is out of the dictionary's bounds.low / bounds.high
+      - 422 if value is non-numeric (bool, string, null)
+
+    Inspect the result via the inbox: <inbox>/<request_id>.applied or
+    .failed will appear within ~1 cycle (~30 s).
+    """
+    ok, err, entry = State.setpoint_catalog.validate_write(setpoint_id, req.value)
+    if not ok:
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "setpoint_not_found", "setpoint_id": setpoint_id},
+            )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_failed",
+                "setpoint_id": setpoint_id,
+                "reason": err,
+                "perturbable": entry.get("perturbable"),
+                "bounds": entry.get("bounds"),
+                "bounds_kind": entry.get("bounds_kind"),
+                "current_value": entry.get("current_value"),
+            },
+        )
+
+    inbox_request = {
+        "setpoint_id": setpoint_id,
+        "owner_tag": entry["owner_tag"],
+        "owner_type": entry["owner_type"],
+        "property_key": entry["property_key"],
+        "value": req.value,
+        "requested_by": req.requested_by,
+    }
+    request_id = State.inbox_writer.enqueue(inbox_request)
+    return SetpointWriteResponse(
+        request_id=request_id,
+        setpoint_id=setpoint_id,
+        queued_value=req.value,
+        status="queued",
+        enqueued_at=inbox_request["enqueued_at"],
     )
 
 

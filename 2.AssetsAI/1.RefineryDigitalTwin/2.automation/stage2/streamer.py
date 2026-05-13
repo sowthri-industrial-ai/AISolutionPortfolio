@@ -42,6 +42,13 @@ STAGE_RE = re.compile(r"\.STAGE_(\d+)\.")
 HOUR_FORMAT = "%Y-%m-%dT%H"
 HOUR_FILE_RE = re.compile(r"^stream_(\d{4}-\d{2}-\d{2}T\d{2})\.jsonl(?:\.gz)?$")
 
+# F3 perturbation inbox — Stage 3 writes one .json file per perturbation
+# request here; Stage 2 drains the inbox at the start of each cycle (BEFORE
+# CalculateFlowsheet4) so the new value is in effect when DWSIM re-solves.
+# Path is overridable via PERTURBATION_INBOX env var; default is sibling
+# directory to streamer.py (matches Stage 3's DEFAULT_PERTURBATION_INBOX).
+DEFAULT_PERTURBATION_INBOX = (Path(__file__).parent / "perturbations_inbox").as_posix()
+
 
 def rget(obj, name, default=None):
     """Read a .NET property by name via reflection (bypasses interface masking)."""
@@ -54,6 +61,24 @@ def rget(obj, name, default=None):
         return prop.GetValue(obj, None)
     except Exception:
         return default
+
+
+def rset(obj, name, value):
+    """Write a .NET property via reflection. Returns (ok, error_message).
+    Used by the F3 perturbation drainer to apply setpoint changes between
+    solve cycles."""
+    if obj is None:
+        return False, "obj is None"
+    try:
+        prop = obj.GetType().GetProperty(name)
+        if prop is None:
+            return False, f"property {name!r} not found on {obj.GetType().Name}"
+        if not prop.CanWrite:
+            return False, f"property {name!r} is read-only"
+        prop.SetValue(obj, value, None)
+        return True, None
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
 
 
 def coerce(v):
@@ -81,9 +106,13 @@ def hour_floor(dt):
 
 
 class Streamer:
-    def __init__(self, tag_dict_path, output_dir, interval_s, retention_days):
+    def __init__(self, tag_dict_path, output_dir, interval_s, retention_days,
+                 perturbation_inbox=None):
         self.tag_dict_path = Path(tag_dict_path).expanduser()
         self.output_dir = Path(output_dir).expanduser()
+        self.perturbation_inbox = Path(
+            perturbation_inbox or DEFAULT_PERTURBATION_INBOX
+        ).expanduser()
         self.interval_s = float(interval_s)
         self.retention_days = int(retention_days)
         self.shutdown = False
@@ -93,6 +122,8 @@ class Streamer:
         self.phase_idx_map = {}  # owner_tag → {OVERALL/VAPOR/LIQUID: int}
         self.current_hour = None
         self.current_file_handle = None
+        self.cumulative_perturbations_applied = 0
+        self.cumulative_perturbations_failed = 0
 
     def log(self, msg):
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -104,6 +135,7 @@ class Streamer:
 
     def bootstrap(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.perturbation_inbox.mkdir(parents=True, exist_ok=True)
         self.log_fp = open(str(self.output_dir / "streamer.log"), "a", encoding="utf-8")
         self.log("=" * 70)
         self.log(f"Streamer starting PID={os.getpid()} interval={self.interval_s}s "
@@ -111,6 +143,7 @@ class Streamer:
         self.log(f"  substrate={SUBSTRATE_PATH}")
         self.log(f"  tag_dict={self.tag_dict_path}")
         self.log(f"  output_dir={self.output_dir}")
+        self.log(f"  perturbation_inbox={self.perturbation_inbox}")
 
         if not self.tag_dict_path.is_file():
             self.log(f"FATAL: tag dict not found: {self.tag_dict_path}"); sys.exit(1)
@@ -317,6 +350,108 @@ class Streamer:
                 kept += 1
         return kept, deleted
 
+    # F3 perturbation inbox — Stage 3's POST /setpoints/{id}/value writes one
+    # JSON request per file here; we drain at the start of each cycle BEFORE
+    # CalculateFlowsheet4 so the new setpoint is in effect when DWSIM re-solves.
+    # Atomic rename to .applied (with prev_value + new_value) on success or
+    # .failed (with error) on DWSIM refusal. Crash-safe in either direction.
+    def _drain_perturbation_inbox(self):
+        """Read all pending *.json files; apply each via reflection; archive
+        outcomes. Returns list of {setpoint_id, status} dicts for logging."""
+        if not self.perturbation_inbox.is_dir():
+            return []
+        # Glob *.json catches pending only; .json.tmp / .applied / .failed
+        # have different suffixes.
+        pending = sorted(
+            p for p in self.perturbation_inbox.glob("*.json")
+            if not p.name.endswith(".json.tmp")
+        )
+        results = []
+        for path in pending:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    req = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                self.log(f"WARN: malformed perturbation file {path.name}: {e}",
+                         level="WARN")
+                continue
+            result = self._apply_perturbation(req)
+            self._archive_perturbation(path, req, result)
+            results.append({
+                "setpoint_id": req.get("setpoint_id"),
+                "status": result.get("status"),
+            })
+        return results
+
+    def _apply_perturbation(self, req):
+        """Look up owner object, write property via rset, verify-after-write
+        (KB §3). Returns result dict with status=applied|failed plus details."""
+        owner_tag = req.get("owner_tag")
+        property_key = req.get("property_key")
+        value = req.get("value")
+        obj = self.obj_map.get(owner_tag)
+        ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+            "+00:00", "Z"
+        )
+        if obj is None:
+            self.cumulative_perturbations_failed += 1
+            self.log(f"perturbation FAILED setpoint={req.get('setpoint_id')} "
+                     f"reason=owner_not_in_sim", level="ERROR")
+            return {
+                "status": "failed",
+                "cycle": self.cycle,
+                "applied_at": ts,
+                "error": f"owner_tag not in sim: {owner_tag!r}",
+            }
+        prev_value = coerce(rget(obj, property_key))
+        ok, err = rset(obj, property_key, value)
+        if not ok:
+            self.cumulative_perturbations_failed += 1
+            self.log(f"perturbation FAILED setpoint={req.get('setpoint_id')} "
+                     f"value={value} reason={err}", level="ERROR")
+            return {
+                "status": "failed",
+                "cycle": self.cycle,
+                "applied_at": ts,
+                "prev_value": prev_value,
+                "attempted_value": value,
+                "error": err,
+            }
+        # Verify-after-write — KB §3: DWSIM serialization can silently mangle.
+        new_value = coerce(rget(obj, property_key))
+        self.cumulative_perturbations_applied += 1
+        self.log(f"perturbation APPLIED setpoint={req.get('setpoint_id')} "
+                 f"prev={prev_value} new={new_value}")
+        return {
+            "status": "applied",
+            "cycle": self.cycle,
+            "applied_at": ts,
+            "prev_value": prev_value,
+            "new_value": new_value,
+        }
+
+    def _archive_perturbation(self, src_path, req, result):
+        """Write merged (req + result) to <request_id>.<applied|failed> via
+        atomic tmp+rename, then delete the original .json file."""
+        request_id = req.get("request_id") or src_path.stem
+        suffix = ".applied" if result.get("status") == "applied" else ".failed"
+        merged = dict(req)
+        merged.update(result)
+        target = self.perturbation_inbox / f"{request_id}{suffix}"
+        tmp = self.perturbation_inbox / f"{request_id}{suffix}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(merged, f, indent=2, ensure_ascii=False)
+            os.rename(tmp, target)
+        except OSError as e:
+            self.log(f"WARN: archive write failed for {request_id}: {e}",
+                     level="WARN")
+            return
+        try:
+            src_path.unlink()
+        except OSError:
+            pass
+
     def _rotate_to(self, new_hour):
         """Close current handle, gzip closed file, open new, run retention sweep."""
         old_hour = self.current_hour
@@ -338,9 +473,24 @@ class Streamer:
         ts = datetime.now(timezone.utc)
         ts_iso = ts.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
+        # F3: drain perturbation inbox BEFORE solve so the new setpoint is
+        # in effect when DWSIM recomputes. Failures here are logged but
+        # never block the solve — perturbation errors shouldn't crash the
+        # cycle. Snapshot records the per-cycle count for the agent's
+        # check_health view.
+        perturbations_this_cycle = []
+        try:
+            perturbations_this_cycle = self._drain_perturbation_inbox()
+        except Exception as e:
+            # Defensive: any unhandled error in the drain path is logged
+            # and swallowed.
+            self.log(f"WARN: perturbation drain raised "
+                     f"{type(e).__name__}: {e}", level="WARN")
+
         snapshot = {"timestamp": ts_iso, "cycle": self.cycle, "solved": False,
                     "solve_time_s": None, "cycle_duration_s": None,
-                    "tag_count": 0, "errors": [], "tags": {}}
+                    "tag_count": 0, "errors": [], "tags": {},
+                    "perturbations_applied_this_cycle": perturbations_this_cycle}
         try:
             t_solve = time.time()
             self.sim_auto.CalculateFlowsheet4(self.sim)
@@ -421,7 +571,9 @@ class Streamer:
                 try: self.current_file_handle.close()
                 except Exception: pass
             self.log(f"Streamer stopped after {self.cycle} cycles ({duration:.1f}s), "
-                     f"{self.cumulative_tag_errors} cumulative tag errors")
+                     f"{self.cumulative_tag_errors} cumulative tag errors, "
+                     f"{self.cumulative_perturbations_applied} perturbations applied, "
+                     f"{self.cumulative_perturbations_failed} perturbations failed")
             if self.log_fp:
                 self.log_fp.flush()
                 self.log_fp.close()
@@ -435,8 +587,12 @@ def main():
                    help="Cycle interval in seconds (default 30)")
     p.add_argument("--retention-days", type=int, default=DEFAULT_RETENTION_DAYS,
                    help="Days of hour-bucket files to retain (default 1)")
+    p.add_argument("--perturbation-inbox",
+                   default=os.environ.get("PERTURBATION_INBOX") or DEFAULT_PERTURBATION_INBOX,
+                   help="Stage 2 perturbation inbox dir (F3 setpoint writes from Stage 3)")
     args = p.parse_args()
-    s = Streamer(args.tag_dict, args.output_dir, args.interval, args.retention_days)
+    s = Streamer(args.tag_dict, args.output_dir, args.interval, args.retention_days,
+                 perturbation_inbox=args.perturbation_inbox)
     def _sig(signum, _frame):
         s.log(f"Received signal {signum}; shutdown after current cycle"); s.shutdown = True
     signal.signal(signal.SIGINT, _sig); signal.signal(signal.SIGTERM, _sig)

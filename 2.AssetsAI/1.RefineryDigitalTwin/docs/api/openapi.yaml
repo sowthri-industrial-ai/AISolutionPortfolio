@@ -196,6 +196,141 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /ontology/schema:
+    get:
+      tags:
+      - ontology
+      summary: Ontology Schema
+      description: 'The raw entity-type + relationship-type schema. Static after startup.
+
+        Returned as a dict (response_model omitted) so the rich nested schema
+
+        structure renders verbatim without intermediate Pydantic flattening.'
+      operationId: ontology_schema_ontology_schema_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Ontology Schema Ontology Schema Get
+  /ontology/entities:
+    get:
+      tags:
+      - ontology
+      summary: Ontology Entities
+      description: 'All 26 ontology entities (23 Phase 0a sim objects + 3 aggregators:
+
+        Refinery + 2 Subsystems). Filter by `type` field client-side.'
+      operationId: ontology_entities_ontology_entities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/OntologyEntity'
+                type: array
+                title: Response Ontology Entities Ontology Entities Get
+  /ontology/entities/{entity_id}:
+    get:
+      tags:
+      - ontology
+      summary: Ontology Entity
+      description: 'One entity + its outbound `relationships`, the reverse-direction
+
+        `inbound_relationships`, and the `tag_ids` mapped to it from
+
+        tag_mapping.json. 404 if unknown.'
+      operationId: ontology_entity_ontology_entities__entity_id__get
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entity Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OntologyEntityDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ontology/tags/{tag_id}:
+    get:
+      tags:
+      - ontology
+      summary: Ontology Tag
+      description: 'Reverse lookup: which entity owns this tag? Augments the tag
+
+        mapping with the owning entity''s name and type.'
+      operationId: ontology_tag_ontology_tags__tag_id__get
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tag Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OntologyTagInfo'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ontology/resolve:
+    get:
+      tags:
+      - ontology
+      summary: Ontology Resolve
+      description: 'Natural-language term → ranked list of {entity, tag_ids}. Demo:
+
+        `?term=condenser%20duty` → ES-CONDENSER_DUTY with EnergyFlow tag.'
+      operationId: ontology_resolve_ontology_resolve_get
+      parameters:
+      - name: term
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          description: 'Natural-language term to resolve. Two-tier match: exact alias
+            hit (score 100) → substring fallback (score scaled by length ratio, capped
+            95).'
+          title: Term
+        description: 'Natural-language term to resolve. Two-tier match: exact alias
+          hit (score 100) → substring fallback (score scaled by length ratio, capped
+          95).'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OntologyResolveResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     HTTPValidationError:
@@ -230,6 +365,241 @@ components:
       - status
       - stage2_active
       title: HealthResponse
+    OntologyEntity:
+      properties:
+        id:
+          type: string
+          title: Id
+        type:
+          type: string
+          title: Type
+        name:
+          type: string
+          title: Name
+        aliases:
+          items:
+            type: string
+          type: array
+          title: Aliases
+        subsystem:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subsystem
+        properties:
+          additionalProperties: true
+          type: object
+          title: Properties
+        stages:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Stages
+        normal_ranges:
+          anyOf:
+          - additionalProperties:
+              additionalProperties: true
+              type: object
+            type: object
+          - type: 'null'
+          title: Normal Ranges
+        relationships:
+          items:
+            $ref: '#/components/schemas/OntologyRelationship'
+          type: array
+          title: Relationships
+      type: object
+      required:
+      - id
+      - type
+      - name
+      title: OntologyEntity
+    OntologyEntityDetail:
+      properties:
+        id:
+          type: string
+          title: Id
+        type:
+          type: string
+          title: Type
+        name:
+          type: string
+          title: Name
+        aliases:
+          items:
+            type: string
+          type: array
+          title: Aliases
+        subsystem:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subsystem
+        properties:
+          additionalProperties: true
+          type: object
+          title: Properties
+        stages:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Stages
+        normal_ranges:
+          anyOf:
+          - additionalProperties:
+              additionalProperties: true
+              type: object
+            type: object
+          - type: 'null'
+          title: Normal Ranges
+        relationships:
+          items:
+            $ref: '#/components/schemas/OntologyRelationship'
+          type: array
+          title: Relationships
+        inbound_relationships:
+          items:
+            $ref: '#/components/schemas/OntologyInboundRelationship'
+          type: array
+          title: Inbound Relationships
+        tag_ids:
+          items:
+            type: string
+          type: array
+          title: Tag Ids
+      type: object
+      required:
+      - id
+      - type
+      - name
+      title: OntologyEntityDetail
+    OntologyInboundRelationship:
+      properties:
+        type:
+          type: string
+          title: Type
+        source:
+          type: string
+          title: Source
+      type: object
+      required:
+      - type
+      - source
+      title: OntologyInboundRelationship
+    OntologyRelationship:
+      properties:
+        type:
+          type: string
+          title: Type
+        target:
+          type: string
+          title: Target
+      type: object
+      required:
+      - type
+      - target
+      title: OntologyRelationship
+    OntologyResolveHit:
+      properties:
+        entity_id:
+          type: string
+          title: Entity Id
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+        match_type:
+          type: string
+          title: Match Type
+        matched_phrase:
+          type: string
+          title: Matched Phrase
+        score:
+          type: integer
+          title: Score
+        tag_ids:
+          items:
+            type: string
+          type: array
+          title: Tag Ids
+      type: object
+      required:
+      - entity_id
+      - match_type
+      - matched_phrase
+      - score
+      - tag_ids
+      title: OntologyResolveHit
+    OntologyResolveResponse:
+      properties:
+        term:
+          type: string
+          title: Term
+        count:
+          type: integer
+          title: Count
+        results:
+          items:
+            $ref: '#/components/schemas/OntologyResolveHit'
+          type: array
+          title: Results
+      type: object
+      required:
+      - term
+      - count
+      - results
+      title: OntologyResolveResponse
+    OntologyTagInfo:
+      properties:
+        tag_id:
+          type: string
+          title: Tag Id
+        entity_id:
+          type: string
+          title: Entity Id
+        entity_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Name
+        entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Type
+        property:
+          type: string
+          title: Property
+        description:
+          type: string
+          title: Description
+        unit:
+          type: string
+          title: Unit
+        category:
+          type: string
+          title: Category
+      type: object
+      required:
+      - tag_id
+      - entity_id
+      - property
+      - description
+      - unit
+      - category
+      title: OntologyTagInfo
     RangeResponse:
       properties:
         count:

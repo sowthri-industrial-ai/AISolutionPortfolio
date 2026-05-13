@@ -122,6 +122,63 @@ class RangeResponse(BaseModel):
     snapshots: list[Snapshot]
 
 
+# ----- Ontology response models (F2) -----
+
+
+class OntologyRelationship(BaseModel):
+    type: str
+    target: str
+
+
+class OntologyInboundRelationship(BaseModel):
+    type: str
+    source: str
+
+
+class OntologyEntity(BaseModel):
+    id: str
+    type: str
+    name: str
+    aliases: list[str] = Field(default_factory=list)
+    subsystem: Optional[str] = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+    stages: Optional[list[dict[str, Any]]] = None
+    normal_ranges: Optional[dict[str, dict[str, Any]]] = None
+    relationships: list[OntologyRelationship] = Field(default_factory=list)
+
+
+class OntologyEntityDetail(OntologyEntity):
+    inbound_relationships: list[OntologyInboundRelationship] = Field(default_factory=list)
+    tag_ids: list[str] = Field(default_factory=list)
+
+
+class OntologyTagInfo(BaseModel):
+    tag_id: str
+    entity_id: str
+    entity_name: Optional[str] = None
+    entity_type: Optional[str] = None
+    property: str
+    description: str
+    unit: str
+    category: str
+
+
+class OntologyResolveHit(BaseModel):
+    entity_id: str
+    name: Optional[str] = None
+    type: Optional[str] = None
+    match_type: str
+    matched_phrase: str
+    score: int
+    tag_ids: list[str]
+
+
+class OntologyResolveResponse(BaseModel):
+    term: str
+    count: int
+    results: list[OntologyResolveHit]
+
+
 # ----- Module state (populated at startup) -----
 
 
@@ -130,6 +187,7 @@ class State:
     stage2_dir: Path = Path(os.environ.get("STAGE2_DIR", DEFAULT_STAGE2_DIR))
     tag_dict: dict[str, dict] = {}
     tag_list: list[dict] = []
+    ontology: Any = None  # OntologyLoader instance, loaded in lifespan
 
 
 def _load_tag_dict() -> None:
@@ -147,9 +205,26 @@ def _load_tag_dict() -> None:
         )
 
 
+def _load_ontology() -> None:
+    """Instantiate the F2 OntologyLoader. Local import keeps the ontology
+    module loaded only when api.py is imported (not as a side effect of
+    importing models)."""
+    # Local import — ontology.py is sibling in 2.automation/stage3/
+    from ontology import OntologyLoader
+
+    State.ontology = OntologyLoader()
+    print(
+        f"[stage3] ontology loaded: "
+        f"{len(State.ontology.entities)} entities, "
+        f"{State.ontology.tag_mapping['tag_count']} tag mappings",
+        flush=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_tag_dict()
+    _load_ontology()
     yield
 
 
@@ -379,6 +454,105 @@ def tags_history(
             )
         )
     return TagHistoryResponse(tag_id=tag_id, count=len(points), points=points)
+
+
+# ----- Ontology endpoints (F2) -----
+
+
+@app.get("/ontology/schema", tags=["ontology"])
+def ontology_schema() -> dict[str, Any]:
+    """The raw entity-type + relationship-type schema. Static after startup.
+    Returned as a dict (response_model omitted) so the rich nested schema
+    structure renders verbatim without intermediate Pydantic flattening."""
+    return State.ontology.schema
+
+
+@app.get(
+    "/ontology/entities",
+    response_model=list[OntologyEntity],
+    tags=["ontology"],
+)
+def ontology_entities() -> list[OntologyEntity]:
+    """All 26 ontology entities (23 Phase 0a sim objects + 3 aggregators:
+    Refinery + 2 Subsystems). Filter by `type` field client-side."""
+    return [OntologyEntity(**e) for e in State.ontology.entities.values()]
+
+
+@app.get(
+    "/ontology/entities/{entity_id}",
+    response_model=OntologyEntityDetail,
+    tags=["ontology"],
+)
+def ontology_entity(entity_id: str) -> OntologyEntityDetail:
+    """One entity + its outbound `relationships`, the reverse-direction
+    `inbound_relationships`, and the `tag_ids` mapped to it from
+    tag_mapping.json. 404 if unknown."""
+    entity = State.ontology.get_entity(entity_id)
+    if entity is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "entity_not_found", "entity_id": entity_id},
+        )
+    rels = State.ontology.get_relationships(entity_id)
+    tag_ids = State.ontology.get_tags_for_entity(entity_id)
+    return OntologyEntityDetail(
+        **entity,
+        inbound_relationships=[
+            OntologyInboundRelationship(**r) for r in rels["inbound"]
+        ],
+        tag_ids=tag_ids,
+    )
+
+
+@app.get(
+    "/ontology/tags/{tag_id}",
+    response_model=OntologyTagInfo,
+    tags=["ontology"],
+)
+def ontology_tag(tag_id: str) -> OntologyTagInfo:
+    """Reverse lookup: which entity owns this tag? Augments the tag
+    mapping with the owning entity's name and type."""
+    info = State.ontology.get_tag_info(tag_id)
+    if info is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "tag_not_found", "tag_id": tag_id},
+        )
+    e = State.ontology.get_entity(info["entity_id"])
+    return OntologyTagInfo(
+        tag_id=info["tag_id"],
+        entity_id=info["entity_id"],
+        entity_name=e.get("name") if e else None,
+        entity_type=e.get("type") if e else None,
+        property=info["property"],
+        description=info["description"],
+        unit=info["unit"],
+        category=info["category"],
+    )
+
+
+@app.get(
+    "/ontology/resolve",
+    response_model=OntologyResolveResponse,
+    tags=["ontology"],
+)
+def ontology_resolve(
+    term: str = Query(
+        ...,
+        min_length=1,
+        description="Natural-language term to resolve. Two-tier match: exact "
+                    "alias hit (score 100) → substring fallback (score scaled by "
+                    "length ratio, capped 95).",
+    ),
+) -> OntologyResolveResponse:
+    """Natural-language term → ranked list of {entity, tag_ids}. Demo:
+    `?term=condenser%20duty` → ES-CONDENSER_DUTY with EnergyFlow tag."""
+    hits = State.ontology.resolve_term(term)
+    return OntologyResolveResponse(
+        term=term,
+        count=len(hits),
+        results=[OntologyResolveHit(**h) for h in hits],
+    )
 
 
 # ----- Entry point -----

@@ -81,6 +81,131 @@ def rset(obj, name, value):
         return False, f"{type(e).__name__}: {e}"
 
 
+# ============================================================================
+# F3 — WRITE_STRATEGIES dispatch table
+# ============================================================================
+#
+# The 25 Phase-0a-perturbable setpoints fall into four write-path categories
+# (probed live; see 2.automation/f3/probe_setpoint_write.py and
+# probe_column_spec_write.py for the diagnostic runs that established this).
+#
+#   reflection      → rset(obj, name, float(value))
+#                     parameter-like properties the solver respects without
+#                     recomputing (Pump.Efficiency, Heater.DeltaP, column
+#                     tolerances, etc.)
+#
+#   reflection_int  → rset(obj, name, int(value))
+#                     control integers the solver respects (Recycle's
+#                     MaximumIterations); Python int → .NET Int32 needs an
+#                     explicit cast because pythonnet won't auto-convert
+#                     PyInt into Int32 via reflection.
+#
+#   calc_mode       → rset CalcMode enum first, then rset target value.
+#                     Heater inputs are gated by CalcMode; setting OutletT
+#                     without first setting CalcMode=OutletTemperature does
+#                     write the property field but the solver recomputes it
+#                     from HeatDuty + inlet on the next CalculateFlowsheet4.
+#                     Params: (enum_int_value,)
+#
+#   column_spec     → invoke col.SetCondenserSpec / SetReboilerSpec —
+#                     DWSIM's official column-spec write API. Updates the
+#                     Specs collection atomically (SType + value + units)
+#                     so the solver respects the spec.
+#                     Params: (side, spec_type_str, units_str)
+#                       side ∈ {"C", "R"} (condenser / reboiler)
+#                       spec_type_str: "Reflux Ratio" | "Heat Duty" | ...
+#                       units_str: "" | "kW" | ...
+#
+# Universal rule from operator: ALWAYS float() (or int() for the _int
+# variant) at the .NET interop boundary. PyInt → .NET Double conversion
+# fails silently otherwise (revert through solve as if the write didn't
+# happen).
+#
+# Unmapped (owner_type, property_key) pairs default to "reflection" with
+# a "may not persist through solve" audit-trail flag — covers any
+# Phase-0a-perturbable property that wasn't categorized here, plus the
+# pump-degenerate calc-mode-output properties (OutletTemperature, HeatDuty,
+# TemperatureChange) where no CalcMode exists to make them inputs.
+
+WRITE_STRATEGIES: dict = {
+    # Strategy A: raw reflection works (parameter-like, not solver-recomputed)
+    ("Pump", "Efficiency"):                          ("reflection", None),
+    ("Pump", "PressureIncrease"):                    ("reflection", None),
+    ("Pump", "DeltaP"):                              ("reflection", None),
+    ("Heater", "DeltaP"):                            ("reflection", None),
+    ("Heater", "PressureDrop"):                      ("reflection", None),
+    ("Heater", "Efficiency"):                        ("reflection", None),
+    ("DistillationColumn", "InternalLoopTolerance"): ("reflection", None),
+    ("DistillationColumn", "ExternalLoopTolerance"): ("reflection", None),
+    ("DistillationColumn", "CondenserDeltaP"):       ("reflection", None),
+
+    # Strategy A_int: integer-typed parameter
+    ("Recycle", "MaximumIterations"):                ("reflection_int", None),
+
+    # Strategy C: CalcMode pre-set + write — heater inputs
+    # Enum values from operator's first probe: HeatAdded=0, OutletTemperature=1,
+    # OutletVaporFraction=3, TemperatureChange=4.
+    ("Heater", "OutletTemperature"):                 ("calc_mode", 1),
+    ("Heater", "HeatDuty"):                          ("calc_mode", 0),
+    ("Heater", "TemperatureChange"):                 ("calc_mode", 4),
+
+    # Strategy D: column spec API — Specs dict keys are "C" / "R"
+    ("DistillationColumn", "RefluxRatio"):   ("column_spec", "C", "Reflux Ratio", ""),
+    ("DistillationColumn", "CondenserDuty"): ("column_spec", "C", "Heat Duty",    "kW"),
+    ("DistillationColumn", "ReboilerDuty"):  ("column_spec", "R", "Heat Duty",    "kW"),
+
+    # Pump degenerate (no CalcMode for these — solver always recomputes).
+    # Map explicitly so the audit trail shows we picked "reflection" knowingly
+    # rather than falling through the default; persisted_through_solve will
+    # be False, the agent sees the regression in the .applied file.
+    ("Pump", "OutletTemperature"):                   ("reflection", None),
+    ("Pump", "HeatDuty"):                            ("reflection", None),
+    ("Pump", "TemperatureChange"):                   ("reflection", None),
+}
+
+
+def _apply_strategy(obj, property_key, value, strategy_name, strategy_params):
+    """Dispatch a single write strategy. Returns (ok, error_message).
+    Always float()/int() at the .NET boundary per operator's universal rule."""
+    if strategy_name == "reflection":
+        return rset(obj, property_key, float(value))
+    if strategy_name == "reflection_int":
+        return rset(obj, property_key, int(value))
+    if strategy_name == "calc_mode":
+        # Set CalcMode enum first (int value), then write target as float.
+        calcmode_int = int(strategy_params[0])
+        ok_cm, err_cm = rset(obj, "CalcMode", calcmode_int)
+        if not ok_cm:
+            # Fallback: use Enum.ToObject + property.SetValue
+            try:
+                from System import Enum
+                cm_prop = obj.GetType().GetProperty("CalcMode")
+                cm_type = cm_prop.PropertyType
+                if cm_type.IsGenericType and cm_type.Name.startswith("Nullable"):
+                    cm_type = cm_type.GetGenericArguments()[0]
+                cm_val = Enum.ToObject(cm_type, calcmode_int)
+                cm_prop.SetValue(obj, cm_val, None)
+            except Exception as e:
+                return False, f"CalcMode set failed via rset ({err_cm}) and Enum.ToObject ({type(e).__name__}: {e})"
+        return rset(obj, property_key, float(value))
+    if strategy_name == "column_spec":
+        side, spec_type_str, units_str = strategy_params
+        method_name = "SetCondenserSpec" if side == "C" else "SetReboilerSpec"
+        try:
+            from System import Array, Object
+            methods = [m for m in obj.GetType().GetMethods()
+                       if str(m.Name) == method_name]
+            for m in methods:
+                if len(list(m.GetParameters())) == 4:
+                    args = Array[Object]([spec_type_str, float(value), units_str, ""])
+                    m.Invoke(obj, args)
+                    return True, None
+            return False, f"no 4-arg {method_name} overload on {obj.GetType().Name}"
+        except Exception as e:
+            return False, f"{type(e).__name__}: {e}"
+    return False, f"unknown strategy {strategy_name!r}"
+
+
 def coerce(v):
     """Coerce .NET / Python value to JSON-safe primitive. None on NaN/Inf."""
     if v is None or isinstance(v, (bool, str)):
@@ -351,13 +476,17 @@ class Streamer:
         return kept, deleted
 
     # F3 perturbation inbox — Stage 3's POST /setpoints/{id}/value writes one
-    # JSON request per file here; we drain at the start of each cycle BEFORE
+    # JSON request per file here. We drain at the start of each cycle BEFORE
     # CalculateFlowsheet4 so the new setpoint is in effect when DWSIM re-solves.
-    # Atomic rename to .applied (with prev_value + new_value) on success or
-    # .failed (with error) on DWSIM refusal. Crash-safe in either direction.
+    # Failed writes archive immediately as .failed; successful writes defer
+    # archive to _finalize_perturbations() which reads back AFTER solve and
+    # records persisted_through_solve so reverts surface in the audit trail.
     def _drain_perturbation_inbox(self):
-        """Read all pending *.json files; apply each via reflection; archive
-        outcomes. Returns list of {setpoint_id, status} dicts for logging."""
+        """Apply writes for all pending *.json requests. Returns list of
+        deferred entries that need post-solve verify + archive — each item:
+            {"src_path": Path, "req": dict, "result": dict}
+        Failed writes (strategy invocation errored) are archived inline as
+        .failed; not included in the returned deferred list."""
         if not self.perturbation_inbox.is_dir():
             return []
         # Glob *.json catches pending only; .json.tmp / .applied / .failed
@@ -366,7 +495,7 @@ class Streamer:
             p for p in self.perturbation_inbox.glob("*.json")
             if not p.name.endswith(".json.tmp")
         )
-        results = []
+        deferred: list[dict] = []
         for path in pending:
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -376,17 +505,22 @@ class Streamer:
                          level="WARN")
                 continue
             result = self._apply_perturbation(req)
-            self._archive_perturbation(path, req, result)
-            results.append({
-                "setpoint_id": req.get("setpoint_id"),
-                "status": result.get("status"),
-            })
-        return results
+            if result.get("status") == "applied":
+                # Defer archive until after this cycle's solve so we can record
+                # post-solve persistence.
+                deferred.append({"src_path": path, "req": req, "result": result})
+            else:
+                # Write itself failed (strategy errored). Archive inline.
+                self._archive_perturbation(path, req, result)
+        return deferred
 
     def _apply_perturbation(self, req):
-        """Look up owner object, write property via rset, verify-after-write
-        (KB §3). Returns result dict with status=applied|failed plus details."""
+        """Look up strategy in WRITE_STRATEGIES, apply write. Returns a result
+        dict with status=applied|failed + strategy_used + diagnostic fields.
+        Post-solve persistence is recorded later by _finalize_perturbations().
+        """
         owner_tag = req.get("owner_tag")
+        owner_type = req.get("owner_type")
         property_key = req.get("property_key")
         value = req.get("value")
         obj = self.obj_map.get(owner_tag)
@@ -401,34 +535,117 @@ class Streamer:
                 "status": "failed",
                 "cycle": self.cycle,
                 "applied_at": ts,
+                "strategy_used": None,
                 "error": f"owner_tag not in sim: {owner_tag!r}",
             }
+
+        # Dispatch
+        strategy_tuple = WRITE_STRATEGIES.get((owner_type, property_key))
+        if strategy_tuple is None:
+            # Unmapped — default to plain reflection with a flag so the audit
+            # surfaces "may not persist".
+            strategy_name = "reflection"
+            strategy_params = None
+            strategy_unmapped = True
+        else:
+            strategy_name = strategy_tuple[0]
+            strategy_params = strategy_tuple[1:] if len(strategy_tuple) > 1 else (None,)
+            # Normalize: ("reflection", None) → params=(None,); collapse to None
+            # for the audit field when there's nothing meaningful to record.
+            if strategy_params == (None,):
+                strategy_params = None
+            strategy_unmapped = False
+
         prev_value = coerce(rget(obj, property_key))
-        ok, err = rset(obj, property_key, value)
+        ok, err = _apply_strategy(obj, property_key, value, strategy_name,
+                                   strategy_params)
         if not ok:
             self.cumulative_perturbations_failed += 1
             self.log(f"perturbation FAILED setpoint={req.get('setpoint_id')} "
-                     f"value={value} reason={err}", level="ERROR")
+                     f"strategy={strategy_name} value={value} reason={err}",
+                     level="ERROR")
             return {
                 "status": "failed",
                 "cycle": self.cycle,
                 "applied_at": ts,
                 "prev_value": prev_value,
                 "attempted_value": value,
+                "strategy_used": strategy_name,
+                "strategy_params": list(strategy_params) if strategy_params else None,
+                "strategy_unmapped": strategy_unmapped,
                 "error": err,
             }
-        # Verify-after-write — KB §3: DWSIM serialization can silently mangle.
-        new_value = coerce(rget(obj, property_key))
-        self.cumulative_perturbations_applied += 1
-        self.log(f"perturbation APPLIED setpoint={req.get('setpoint_id')} "
-                 f"prev={prev_value} new={new_value}")
+
+        # Immediate (pre-solve) verify-after-write — KB §3 catches obvious
+        # serialization mangling. Post-solve verify happens in
+        # _finalize_perturbations() once this cycle's CalculateFlowsheet4
+        # completes.
+        immediate_value = coerce(rget(obj, property_key))
         return {
             "status": "applied",
             "cycle": self.cycle,
             "applied_at": ts,
             "prev_value": prev_value,
-            "new_value": new_value,
+            "immediate_value": immediate_value,
+            "strategy_used": strategy_name,
+            "strategy_params": list(strategy_params) if strategy_params else None,
+            "strategy_unmapped": strategy_unmapped,
         }
+
+    def _finalize_perturbations(self, deferred):
+        """After the cycle's CalculateFlowsheet4, read each perturbed
+        property's post-solve value, compute persisted_through_solve, and
+        archive the merged (req + result) as <uuid>.applied. Returns a list
+        of {setpoint_id, status, persisted_through_solve} dicts for the
+        snapshot's per-cycle summary."""
+        summary = []
+        for entry in deferred:
+            src_path = entry["src_path"]
+            req = entry["req"]
+            result = entry["result"]
+            obj = self.obj_map.get(req.get("owner_tag"))
+            property_key = req.get("property_key")
+            target = None
+            try:
+                target = float(req.get("value"))
+            except (TypeError, ValueError):
+                target = None
+
+            post_solve = coerce(rget(obj, property_key)) if obj is not None else None
+            result["new_value"] = post_solve
+
+            # Persistence: within max(1% of |target|, 0.001) absolute tolerance.
+            persisted = False
+            if isinstance(post_solve, (int, float)) and target is not None:
+                tol = max(abs(target) * 0.01, 0.001)
+                persisted = abs(post_solve - target) <= tol
+            result["persisted_through_solve"] = persisted
+
+            self.cumulative_perturbations_applied += 1
+            if persisted:
+                self.log(
+                    f"perturbation APPLIED setpoint={req.get('setpoint_id')} "
+                    f"strategy={result.get('strategy_used')} "
+                    f"prev={result.get('prev_value')} → post-solve={post_solve}"
+                )
+            else:
+                self.log(
+                    f"perturbation APPLIED-BUT-REVERTED "
+                    f"setpoint={req.get('setpoint_id')} "
+                    f"strategy={result.get('strategy_used')} "
+                    f"target={target} post-solve={post_solve} "
+                    f"(solver did not respect write)",
+                    level="WARN",
+                )
+
+            self._archive_perturbation(src_path, req, result)
+            summary.append({
+                "setpoint_id": req.get("setpoint_id"),
+                "status": "applied",
+                "persisted_through_solve": persisted,
+                "strategy_used": result.get("strategy_used"),
+            })
+        return summary
 
     def _archive_perturbation(self, src_path, req, result):
         """Write merged (req + result) to <request_id>.<applied|failed> via
@@ -474,13 +691,14 @@ class Streamer:
         ts_iso = ts.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
         # F3: drain perturbation inbox BEFORE solve so the new setpoint is
-        # in effect when DWSIM recomputes. Failures here are logged but
-        # never block the solve — perturbation errors shouldn't crash the
-        # cycle. Snapshot records the per-cycle count for the agent's
-        # check_health view.
-        perturbations_this_cycle = []
+        # in effect when DWSIM recomputes. The drain APPLIES the writes via
+        # WRITE_STRATEGIES dispatch but DEFERS archiving; post-solve verify
+        # + .applied archive happens after CalculateFlowsheet4 below in
+        # _finalize_perturbations(). Failures here are logged but never
+        # block the solve.
+        deferred_perturbations = []
         try:
-            perturbations_this_cycle = self._drain_perturbation_inbox()
+            deferred_perturbations = self._drain_perturbation_inbox()
         except Exception as e:
             # Defensive: any unhandled error in the drain path is logged
             # and swallowed.
@@ -490,13 +708,26 @@ class Streamer:
         snapshot = {"timestamp": ts_iso, "cycle": self.cycle, "solved": False,
                     "solve_time_s": None, "cycle_duration_s": None,
                     "tag_count": 0, "errors": [], "tags": {},
-                    "perturbations_applied_this_cycle": perturbations_this_cycle}
+                    "perturbations_applied_this_cycle": []}
         try:
             t_solve = time.time()
             self.sim_auto.CalculateFlowsheet4(self.sim)
             snapshot["solve_time_s"] = round(time.time() - t_solve, 3)
             sim_solved = bool(self.sim.Solved)
             snapshot["solved"] = sim_solved
+
+            # F3: post-solve verify + archive each deferred perturbation. Even
+            # if sim.Solved is False, we still finalize — the audit trail
+            # should record whatever the post-solve read says about the
+            # property (potentially with persisted_through_solve=False).
+            if deferred_perturbations:
+                try:
+                    snapshot["perturbations_applied_this_cycle"] = (
+                        self._finalize_perturbations(deferred_perturbations)
+                    )
+                except Exception as e:
+                    self.log(f"WARN: perturbation finalize raised "
+                             f"{type(e).__name__}: {e}", level="WARN")
 
             if sim_solved:
                 tags, errors, total_err = {}, [], 0
@@ -524,6 +755,18 @@ class Streamer:
                              "tags": {}, "errors": [f"{type(e).__name__}: {e}"]})
             self.consecutive_failures += 1
             self.log(f"Cycle {self.cycle} caught {type(e).__name__}: {e}")
+            # Solve crashed before finalize ran. Finalize anyway so the
+            # perturbation audit trail doesn't get stuck — post-solve reads
+            # may show stale or partial values, but persisted_through_solve
+            # will correctly report False if so.
+            if deferred_perturbations:
+                try:
+                    snapshot["perturbations_applied_this_cycle"] = (
+                        self._finalize_perturbations(deferred_perturbations)
+                    )
+                except Exception as fe:
+                    self.log(f"WARN: perturbation finalize raised (post-crash) "
+                             f"{type(fe).__name__}: {fe}", level="WARN")
 
         snapshot["cycle_duration_s"] = round(time.time() - t0, 3)
 

@@ -222,9 +222,24 @@ async def test_minimal_agent_writes_all_six_event_types_to_cosmos(
     types_emitted = [e.type for e in in_memory_sink.events]
     assert types_emitted[0] is AgentEventType.PLAN_START
     assert types_emitted[-1] is AgentEventType.COMPLETE
-    assert set(types_emitted) == set(
-        AgentEventType
-    ), f"Missing event types in in-memory sink: {set(AgentEventType) - set(types_emitted)}"
+    # Phase 2's six canonical event types must all appear on a happy-path
+    # run. Subset (not equality) check — Phase 4 added
+    # SCHEMA_VALIDATION_FAILED which is only emitted on validation
+    # failure and is not expected here. Future phases will add more
+    # conditional event types; this assertion stays correct as long as
+    # the happy path keeps producing the canonical six.
+    phase_2_canonical = {
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    }
+    assert phase_2_canonical <= set(types_emitted), (
+        f"Phase 2 canonical events missing from in-memory sink: "
+        f"{phase_2_canonical - set(types_emitted)}"
+    )
 
     assert all(e.session_id == session_id for e in in_memory_sink.events)
     assert final_state.get("final_answer") is not None
@@ -241,10 +256,15 @@ async def test_minimal_agent_writes_all_six_event_types_to_cosmos(
         in_memory_sink.events
     ), f"Cosmos persisted {len(docs)} docs but emitter emitted {len(in_memory_sink.events)}"
     types_in_cosmos = {d["type"] for d in docs}
-    expected_types = {t.value for t in AgentEventType}
-    assert (
-        types_in_cosmos == expected_types
-    ), f"Missing in Cosmos: {expected_types - types_in_cosmos}"
+    types_emitted_values = {t.value for t in types_emitted}
+    # Cosmos must persist exactly what the emitter emitted — no more, no
+    # less. This catches a CosmosSink that silently drops events as well
+    # as one that double-writes.
+    assert types_in_cosmos == types_emitted_values, (
+        f"Cosmos type set diverges from emitter type set: "
+        f"in cosmos only={types_in_cosmos - types_emitted_values}; "
+        f"in emitter only={types_emitted_values - types_in_cosmos}"
+    )
 
     # Every persisted doc carries the right partition key + a UUID id.
     for doc in docs:

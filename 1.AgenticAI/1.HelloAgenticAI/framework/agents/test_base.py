@@ -2,6 +2,11 @@
 six AgentEventTypes in the right order, supports replanning iterations,
 caps at max_iterations, and threads tool input/output schemas correctly.
 
+Phase 4 additions exercise the schema-validation retry/emit helper:
+``SCHEMA_VALIDATION_FAILED`` events on each retry attempt, exception
+propagation after the budget exhausts, and tool-input-validation
+failures routed through the same gate.
+
 Tests use a deterministic in-process tool and a deterministic AgentBase
 subclass — no LLM, no Cosmos. The integration suite exercises the live
 AOAI + Cosmos path with all 6 event types.
@@ -20,6 +25,15 @@ from framework.agents.base import (
     ReflectionDecision,
     ToolDecision,
 )
+from framework.guardrails.content_safety import (
+    CategoryAnalysis,
+    ContentSafetyClient,
+    ContentSafetyError,
+    ContentSafetyResult,
+    HarmCategory,
+    Severity,
+)
+from framework.guardrails.schema import SchemaValidationError
 from framework.observability.events import (
     AgentEventEmitter,
     AgentEventType,
@@ -270,3 +284,381 @@ def test_cannot_instantiate_agent_base_directly() -> None:
     emitter, _ = _make_emitter_with_sink()
     with pytest.raises(TypeError):
         AgentBase(emitter=emitter, tools=_make_registry())  # type: ignore[abstract]
+
+
+# ---------- Phase 4: schema-validation retry + SCHEMA_VALIDATION_FAILED ----------
+
+
+class _PlanModel(BaseModel):
+    """Stand-in Pydantic model — exists only to carry a ``__name__`` for
+    SchemaValidationError so the event payload's ``model`` field is
+    realistic."""
+
+    goal: str
+
+
+class _RouteModel(BaseModel):
+    """Stand-in model for router-validation failures."""
+
+    tool_name: str
+
+
+class _ReflectModel(BaseModel):
+    """Stand-in model for reflector-validation failures."""
+
+    done: bool
+
+
+class _FlakyPlanAgent(_OneShotAgent):
+    """``_plan`` raises ``SchemaValidationError`` the first ``fail_count``
+    times it's called; afterwards behaves like ``_OneShotAgent``. Lets us
+    assert retry-then-recover paths without an LLM."""
+
+    def __init__(self, *args: Any, fail_count: int = 2, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._fail_count = fail_count
+        self._plan_attempts = 0
+
+    async def _plan(self, goal: str) -> dict[str, Any]:
+        self._plan_attempts += 1
+        if self._plan_attempts <= self._fail_count:
+            raise SchemaValidationError(_PlanModel, reason=f"flaky attempt {self._plan_attempts}")
+        return await super()._plan(goal)
+
+
+class _FlakyRouteAgent(_OneShotAgent):
+    """``_route`` raises ``SchemaValidationError`` ``fail_count`` times,
+    then returns the normal ``ToolDecision``."""
+
+    def __init__(self, *args: Any, fail_count: int = 2, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._fail_count = fail_count
+        self._route_attempts = 0
+
+    async def _route(self, plan: Any, history: list[HistoryEntry]) -> ToolDecision:
+        self._route_attempts += 1
+        if self._route_attempts <= self._fail_count:
+            raise SchemaValidationError(
+                _RouteModel, reason=f"flaky route attempt {self._route_attempts}"
+            )
+        return await super()._route(plan, history)
+
+
+class _FlakyReflectAgent(_OneShotAgent):
+    """``_reflect`` raises ``SchemaValidationError`` ``fail_count`` times,
+    then returns the normal terminal ``ReflectionDecision``."""
+
+    def __init__(self, *args: Any, fail_count: int = 2, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._fail_count = fail_count
+        self._reflect_attempts = 0
+
+    async def _reflect(self, history: list[HistoryEntry]) -> ReflectionDecision:
+        self._reflect_attempts += 1
+        if self._reflect_attempts <= self._fail_count:
+            raise SchemaValidationError(
+                _ReflectModel, reason=f"flaky reflect attempt {self._reflect_attempts}"
+            )
+        return await super()._reflect(history)
+
+
+class _BadArgsAgent(_OneShotAgent):
+    """``_route`` returns a ``ToolDecision`` with args that fail the
+    tool's ``input_schema`` ``fail_count`` times, then returns valid args.
+
+    Exercises the raw ``pydantic.ValidationError`` path through the same
+    retry helper (the tool-input gate, line 217 of agents/base.py)."""
+
+    def __init__(self, *args: Any, fail_count: int = 2, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._fail_count = fail_count
+        self._route_attempts = 0
+
+    async def _route(self, plan: Any, history: list[HistoryEntry]) -> ToolDecision:
+        self._route_attempts += 1
+        if self._route_attempts <= self._fail_count:
+            # `text` is required on _EchoIn — wrong-typed arg trips
+            # pydantic.ValidationError at `tool.input_schema.model_validate`.
+            return ToolDecision(tool_name="echo", args={"text": 12345})
+        return await super()._route(plan, history)
+
+
+async def test_plan_retries_then_succeeds_emits_validation_failed_then_complete() -> None:
+    """Two plan failures, then success: assert 2x ``SCHEMA_VALIDATION_FAILED``
+    events with monotonically-increasing attempt counter, then the normal
+    six-event happy path follows."""
+    emitter, sink = _make_emitter_with_sink()
+    agent = _FlakyPlanAgent(emitter=emitter, tools=_make_registry(), fail_count=2)
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    # PLAN_START is emitted ONCE (before the retry loop), then two failed
+    # attempts emit SCHEMA_VALIDATION_FAILED, then PLAN_COMPLETE fires
+    # after the 3rd (successful) attempt.
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.SCHEMA_VALIDATION_FAILED,
+        AgentEventType.SCHEMA_VALIDATION_FAILED,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    ]
+    failures = [e for e in sink.events if e.type is AgentEventType.SCHEMA_VALIDATION_FAILED]
+    assert [f.payload["attempt"] for f in failures] == [1, 2]
+    assert all(f.payload["model"] == "_PlanModel" for f in failures)
+    assert all(f.payload["max_retries"] == 2 for f in failures)
+    assert all(f.node == "plan" for f in failures)
+
+
+async def test_plan_retries_exhausted_propagates_after_three_attempts() -> None:
+    """fail_count=3 means all three attempts fail. Assert the exception
+    propagates AND three SCHEMA_VALIDATION_FAILED events were emitted
+    (the final attempt fires the event before raising — observability is
+    not skipped on the propagating attempt)."""
+    emitter, sink = _make_emitter_with_sink()
+    agent = _FlakyPlanAgent(emitter=emitter, tools=_make_registry(), fail_count=3)
+    with pytest.raises(SchemaValidationError) as excinfo:
+        await agent.run("hello", session_id="s1")
+    assert excinfo.value.model is _PlanModel
+    failures = [e for e in sink.events if e.type is AgentEventType.SCHEMA_VALIDATION_FAILED]
+    assert [f.payload["attempt"] for f in failures] == [1, 2, 3]
+    # PLAN_COMPLETE is NOT in the trace — the loop never got there.
+    assert not any(e.type is AgentEventType.PLAN_COMPLETE for e in sink.events)
+
+
+async def test_route_retries_emit_at_route_node_not_tool_name() -> None:
+    """A route-side schema failure carries node='route' (the agent-graph
+    node label), not the eventual tool name — at retry time we may not
+    even know what tool we're heading for."""
+    emitter, sink = _make_emitter_with_sink()
+    agent = _FlakyRouteAgent(emitter=emitter, tools=_make_registry(), fail_count=1)
+    await agent.run("hello", session_id="s1")
+    failures = [e for e in sink.events if e.type is AgentEventType.SCHEMA_VALIDATION_FAILED]
+    assert len(failures) == 1
+    assert failures[0].node == "route"
+    assert failures[0].payload["model"] == "_RouteModel"
+    # TOOL_CALL fires exactly once — only after the successful retry.
+    tool_calls = [e for e in sink.events if e.type is AgentEventType.TOOL_CALL]
+    assert len(tool_calls) == 1
+
+
+async def test_tool_input_validation_failure_routes_through_same_gate() -> None:
+    """Tool-input validation (raw ``pydantic.ValidationError`` from
+    ``tool.input_schema.model_validate``) goes through the same retry
+    helper as LLM-side ``SchemaValidationError``."""
+    emitter, sink = _make_emitter_with_sink()
+    agent = _BadArgsAgent(emitter=emitter, tools=_make_registry(), fail_count=1)
+    await agent.run("hello", session_id="s1")
+    failures = [e for e in sink.events if e.type is AgentEventType.SCHEMA_VALIDATION_FAILED]
+    assert len(failures) == 1
+    assert failures[0].node == "route"
+    # Pydantic v2 ValidationError.title is the model class name — the
+    # tool's `_EchoIn`, not the agent's `_RouteModel`.
+    assert failures[0].payload["model"] == "_EchoIn"
+    # error detail is the structured Pydantic .errors() list
+    assert isinstance(failures[0].payload["errors"], list)
+    assert failures[0].payload["errors"][0]["type"] == "string_type"
+
+
+async def test_reflect_retries_succeed_then_complete_fires() -> None:
+    emitter, sink = _make_emitter_with_sink()
+    agent = _FlakyReflectAgent(emitter=emitter, tools=_make_registry(), fail_count=2)
+    await agent.run("hello", session_id="s1")
+    failures = [e for e in sink.events if e.type is AgentEventType.SCHEMA_VALIDATION_FAILED]
+    assert [f.payload["attempt"] for f in failures] == [1, 2]
+    assert all(f.node == "reflect" for f in failures)
+    # The REFLECT event still fires after the successful retry, and
+    # COMPLETE follows. The user sees one reflect step (not three).
+    assert any(e.type is AgentEventType.REFLECT for e in sink.events)
+    assert any(e.type is AgentEventType.COMPLETE for e in sink.events)
+
+
+async def test_validation_failed_event_truncates_long_error_lists() -> None:
+    """A pathological ValidationError with many errors gets capped in the
+    event payload (full exception still propagates on the final attempt)."""
+    from pydantic import ValidationError
+
+    from framework.agents.base import _truncate_errors
+
+    fake_errors = [
+        {"type": "missing", "loc": (f"field_{i}",), "msg": f"required field {i}"} for i in range(10)
+    ]
+    truncated = _truncate_errors(fake_errors)
+    assert len(truncated) == 4  # 3 head + 1 truncation marker
+    assert truncated[-1]["type"] == "_truncated"
+    assert "+7 more" in truncated[-1]["msg"]
+    # ValidationError import is sanity — proves the type is reachable
+    # from the helper's perspective (the helper accepts it).
+    assert ValidationError is not None
+
+
+# ---------- Phase 4 batch 3: Content Safety input + output gates ----------
+
+
+def _allow_all() -> ContentSafetyResult:
+    """All-SAFE fixture — agent runs normally through this verdict."""
+    return ContentSafetyResult(
+        categories=[CategoryAnalysis(category=c, severity=Severity.SAFE) for c in HarmCategory]
+    )
+
+
+def _block_at(
+    category: HarmCategory = HarmCategory.HATE,
+    severity: Severity = Severity.HIGH,
+) -> ContentSafetyResult:
+    """Build a BLOCK fixture flagging one category at the given severity."""
+    return ContentSafetyResult(
+        categories=[
+            CategoryAnalysis(category=category, severity=severity),
+            *[
+                CategoryAnalysis(category=c, severity=Severity.SAFE)
+                for c in HarmCategory
+                if c != category
+            ],
+        ]
+    )
+
+
+class _StubContentSafetyClient(ContentSafetyClient):
+    """Test double — returns scripted ``ContentSafetyResult``\\s.
+
+    Subclasses :class:`ContentSafetyClient` so its type satisfies
+    ``AgentBase.__init__``'s ``content_safety`` parameter without
+    casting. ``check_text`` is fully overridden, so the parent's
+    lazy-init machinery never fires — no SDK import, no auth, no
+    network. Use ``calls`` to assert what was checked + in what order.
+    """
+
+    def __init__(self, *responses: ContentSafetyResult) -> None:
+        super().__init__()
+        self._scripted = list(responses)
+        self.calls: list[str] = []
+
+    async def check_text(self, text: str) -> ContentSafetyResult:
+        self.calls.append(text)
+        if self._scripted:
+            return self._scripted.pop(0)
+        # Default: ALLOW once the script is exhausted — matches the
+        # client's own degraded fail-open behavior.
+        return _allow_all()
+
+
+async def test_input_gate_safe_input_runs_normally() -> None:
+    """SAFE input verdict produces the canonical six-event happy path —
+    GUARDRAIL_BLOCKED never fires, ContentSafetyError never raises."""
+    emitter, sink = _make_emitter_with_sink()
+    cs = _StubContentSafetyClient(_allow_all(), _allow_all())
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    ]
+    # Both gates fired: input check_text + output check_text
+    assert cs.calls == ["hello", "HELLO"]
+
+
+async def test_input_gate_blocked_raises_content_safety_error_no_plan_start() -> None:
+    """BLOCKed input raises ContentSafetyError BEFORE the agent loop
+    starts. PLAN_START never fires; only the GUARDRAIL_BLOCKED event
+    lands in the sink."""
+    emitter, sink = _make_emitter_with_sink()
+    cs = _StubContentSafetyClient(_block_at(HarmCategory.HATE, Severity.HIGH))
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    with pytest.raises(ContentSafetyError) as excinfo:
+        await agent.run("flagged input", session_id="s1")
+    assert excinfo.value.gate == "input"
+    assert excinfo.value.blocking_categories == [HarmCategory.HATE]
+    assert excinfo.value.severity is Severity.HIGH
+    # Only ONE event — GUARDRAIL_BLOCKED — was emitted. Specifically:
+    # no PLAN_START, no plan/route/reflect/tool/complete.
+    types = [e.type for e in sink.events]
+    assert types == [AgentEventType.GUARDRAIL_BLOCKED]
+    payload = sink.events[0].payload
+    assert payload["gate"] == "input"
+    assert payload["categories"] == ["Hate"]
+    assert payload["severity"] == Severity.HIGH.value
+    assert payload["severity_name"] == "HIGH"
+    # Only input check_text was called — output never got a chance
+    assert cs.calls == ["flagged input"]
+
+
+async def test_output_gate_blocked_replaces_answer_and_emits_event() -> None:
+    """BLOCKed output replaces ``final_answer`` with a redaction notice
+    AND emits GUARDRAIL_BLOCKED. COMPLETE still fires (the run is done;
+    only the answer is unsafe to surface)."""
+    emitter, sink = _make_emitter_with_sink()
+    # Input ALLOW, output BLOCK
+    cs = _StubContentSafetyClient(
+        _allow_all(),
+        _block_at(HarmCategory.VIOLENCE, Severity.MEDIUM),
+    )
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    final_state = await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    # GUARDRAIL_BLOCKED appears AFTER REFLECT (run is done) and
+    # immediately before COMPLETE.
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.GUARDRAIL_BLOCKED,
+        AgentEventType.COMPLETE,
+    ]
+    blocked = next(e for e in sink.events if e.type is AgentEventType.GUARDRAIL_BLOCKED)
+    assert blocked.payload["gate"] == "output"
+    assert blocked.payload["categories"] == ["Violence"]
+    assert blocked.payload["severity_name"] == "MEDIUM"
+    # COMPLETE carries the redaction notice, not the agent's answer.
+    complete = next(e for e in sink.events if e.type is AgentEventType.COMPLETE)
+    answer = complete.payload["final_answer"]
+    assert "redacted by safety filters" in answer
+    assert "Violence" in answer
+    assert "MEDIUM" in answer
+    # final_state.final_answer is also the redaction — Chainlit sees the
+    # redacted text via state, not the agent's raw answer.
+    assert final_state["final_answer"] == answer
+
+
+async def test_no_content_safety_phase_3_behavior_preserved() -> None:
+    """``content_safety=None`` (default) → identical to Phase 3. This is
+    the backward-compatibility contract for every existing test."""
+    emitter, sink = _make_emitter_with_sink()
+    # No content_safety supplied — Phase 3 path
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry())
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types == [
+        AgentEventType.PLAN_START,
+        AgentEventType.PLAN_COMPLETE,
+        AgentEventType.TOOL_CALL,
+        AgentEventType.TOOL_RESULT,
+        AgentEventType.REFLECT,
+        AgentEventType.COMPLETE,
+    ]
+
+
+async def test_input_gate_at_low_severity_does_not_block() -> None:
+    """SAFE/LOW verdicts fall under the MEDIUM block threshold; the
+    agent runs normally even with non-zero severity readings."""
+    emitter, sink = _make_emitter_with_sink()
+    # All categories LOW — below the MEDIUM block threshold
+    low_reading = ContentSafetyResult(
+        categories=[CategoryAnalysis(category=c, severity=Severity.LOW) for c in HarmCategory]
+    )
+    cs = _StubContentSafetyClient(low_reading, low_reading)
+    agent = _OneShotAgent(emitter=emitter, tools=_make_registry(), content_safety=cs)
+    await agent.run("hello", session_id="s1")
+    types = [e.type for e in sink.events]
+    assert AgentEventType.GUARDRAIL_BLOCKED not in types
+    assert types[-1] is AgentEventType.COMPLETE

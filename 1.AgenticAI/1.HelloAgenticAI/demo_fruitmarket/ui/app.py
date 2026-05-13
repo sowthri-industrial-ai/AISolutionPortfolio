@@ -108,7 +108,11 @@ async def on_message(message: cl.Message) -> None:
         ).send()
         return
 
-    sink = ChainlitSink()
+    # Optional Phase 4 wiring — both env vars set by Bicep batch 7 (KV
+    # secret-ref for LANGFUSE_HOST). When absent, the sink simply
+    # doesn't render the "View full trace in Langfuse" link.
+    langfuse_host = os.getenv("LANGFUSE_HOST")
+    sink = ChainlitSink(langfuse_host=langfuse_host)
     session_id = f"chainlit-{uuid4().hex[:12]}"
 
     try:

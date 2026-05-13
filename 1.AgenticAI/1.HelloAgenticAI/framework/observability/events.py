@@ -11,13 +11,23 @@ agent run. Phase 2 ships:
 * the :class:`AgentEventEmitter` (async fan-out, optional error swallowing
   for production loops);
 * :class:`InMemorySink` (unit-test fixture) and :class:`LoggingSink`
-  (always-on dev fallback);
-* typed stubs for App Insights / Langfuse / UI stream sinks — Phase 4
-  swaps the stubs for real ingestion.
+  (always-on dev fallback).
+
+Phase 4 adds:
+
+* ``SCHEMA_VALIDATION_FAILED`` and ``GUARDRAIL_BLOCKED`` event types;
+* :class:`AppInsightsSink` (re-exported from
+  :mod:`framework.observability.app_insights`) — real OTel-based App
+  Insights ingestion with lazy init.
+* :class:`LangfuseSink` (re-exported from
+  :mod:`framework.observability.langfuse`) — Langfuse Cloud trace +
+  span ingestion with Key Vault-backed lazy init.
 
 The Cosmos sink intentionally lives in :mod:`framework.memory.cosmos`
 because it depends on :class:`CosmosProvider`; importing it here would
-create a layering inversion.
+create a layering inversion. The same separation applies to
+:class:`AppInsightsSink` and :class:`LangfuseSink` (each in its own
+module under :mod:`framework.observability`).
 """
 
 from __future__ import annotations
@@ -36,12 +46,39 @@ logger = logging.getLogger(__name__)
 
 
 class AgentEventType(StrEnum):
-    """Canonical event taxonomy for an agent run.
+    """Canonical agent-loop event types, emitted via :class:`AgentEventEmitter`.
 
-    These six are the minimum surface every vertical project's runs must
-    emit. Phase 4 will add ``GUARDRAIL_BLOCK``,
-    ``SCHEMA_VALIDATION_FAILURE``, ``LLM_CALL_START``,
-    ``LLM_CALL_COMPLETE``, ``ROUTE``.
+    **Contract.**
+
+    * **The Phase 2 canonical six** — ``PLAN_START``, ``PLAN_COMPLETE``,
+      ``TOOL_CALL``, ``TOOL_RESULT``, ``REFLECT``, ``COMPLETE`` — are
+      required and stable. Every vertical project's agent runs must emit
+      all six on a happy-path execution. Removing or renaming any of
+      these is a breaking change to the framework.
+
+    * **Additional event types may be added in future phases.** Phase 4
+      adds ``SCHEMA_VALIDATION_FAILED`` (emitted on each retry attempt
+      when a structured LLM output or tool-input payload fails Pydantic
+      validation — 3 attempts total per node per PROJECT_PLAN; the 3rd
+      failure also propagates as a typed exception, so a run that
+      exhausts retries produces three events plus an error). Phase 4
+      will also add ``GUARDRAIL_BLOCKED`` (Content Safety input/output
+      gates). Future phases may add ``LLM_CALL_START`` /
+      ``LLM_CALL_COMPLETE`` / ``ROUTE``. Sinks and tests should treat
+      the canonical six as a **subset** of the live enum, not equal to
+      it.
+
+    * **``*_START`` events must have a matching ``*_COMPLETE`` event in
+      normal control flow.** Emit ``*_START`` only when the operation is
+      committed to running, not while still evaluating whether to run
+      it. This is a Phase 4 design principle adopted after ``TOOL_CALL``
+      was tightened to fire only AFTER the route + tool-input-validation
+      retry block succeeds — guarantees the trace produces strict pairs
+      that downstream consumers (Langfuse span pairing, UI step
+      rendering, latency-pair calculation in App Insights workbook) can
+      rely on. The principle generalises to event types we haven't
+      built yet (e.g. an ``LLM_CALL_START`` must only fire when the
+      bound LLM call is about to be issued).
     """
 
     PLAN_START = "plan_start"
@@ -50,6 +87,8 @@ class AgentEventType(StrEnum):
     TOOL_RESULT = "tool_result"
     REFLECT = "reflect"
     COMPLETE = "complete"
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    GUARDRAIL_BLOCKED = "guardrail_blocked"
 
 
 class AgentEvent(BaseModel):
@@ -164,47 +203,22 @@ class LoggingSink:
         )
 
 
-# ---------- Phase 3 / Phase 4 stubs ----------
+# ---------- Phase 4 real sinks (re-exported from sibling modules) ----------
 
+# AppInsightsSink lives in framework.observability.app_insights to keep
+# the OTel + Azure Monitor imports out of this base module — projects
+# that don't need App Insights shouldn't pay that import cost. Re-
+# exported here so existing callers' import paths (``from
+# framework.observability.events import AppInsightsSink``) keep
+# working.
+from framework.observability.app_insights import (  # noqa: E402
+    AppInsightsSink as AppInsightsSink,
+)
+from framework.observability.langfuse import (  # noqa: E402
+    LangfuseSink as LangfuseSink,
+)
 
-class AppInsightsSink:
-    """STUB for Phase 4 — App Insights ingestion via OpenTelemetry.
-
-    Phase 2 ships a no-op-ish sink that satisfies :class:`EventSink`; Phase
-    4 swaps in real ``opentelemetry-azure-monitor`` wiring keyed off the
-    AOAI-deployed App Insights connection string.
-    """
-
-    def __init__(self, connection_string: str | None = None) -> None:
-        self._connection_string = connection_string
-        self._logger = logging.getLogger("agent.events.appinsights.stub")
-
-    async def emit(self, event: AgentEvent) -> None:
-        # TODO(phase4): publish via opentelemetry-azure-monitor.
-        self._logger.debug(
-            "STUB AppInsights emit: %s session=%s",
-            event.type.value,
-            event.session_id,
-        )
-
-
-class LangfuseSink:
-    """STUB for Phase 4 — Langfuse Cloud ingestion (per ADR-0001).
-
-    Phase 4 will read ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY``
-    from Key Vault and call the Langfuse SDK.
-    """
-
-    def __init__(self) -> None:
-        self._logger = logging.getLogger("agent.events.langfuse.stub")
-
-    async def emit(self, event: AgentEvent) -> None:
-        # TODO(phase4): publish via langfuse SDK.
-        self._logger.debug(
-            "STUB Langfuse emit: %s session=%s",
-            event.type.value,
-            event.session_id,
-        )
+# ---------- Remaining stubs ----------
 
 
 class UIStreamSink:

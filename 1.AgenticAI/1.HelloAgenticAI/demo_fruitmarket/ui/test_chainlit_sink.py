@@ -412,3 +412,147 @@ async def test_non_json_serialisable_payload_falls_back_to_str() -> None:
     step = fake._created_steps[0]
     assert step.output is not None
     assert "<NotJsonable>" in step.output
+
+
+# ---------- Phase 4: Langfuse trace link on COMPLETE ----------
+
+
+async def test_complete_renders_langfuse_link_when_host_configured() -> None:
+    """When ``langfuse_host`` is set at construction, the COMPLETE
+    handler posts a second cl.Message with a clickable trace URL after
+    the agent's final answer."""
+    fake = _fake_chainlit_module()
+    sink = ChainlitSink(
+        chainlit_module=fake,
+        langfuse_host="https://cloud.langfuse.com",
+    )
+    await sink.emit(
+        AgentEvent(
+            session_id="sess-xyz",
+            type=AgentEventType.COMPLETE,
+            payload={"final_answer": "Your basket includes...", "iterations": 1},
+        )
+    )
+    # Two messages: the agent's final answer, then the Langfuse link.
+    assert len(fake._created_messages) == 2
+    answer_msg = fake._created_messages[0]
+    link_msg = fake._created_messages[1]
+    assert answer_msg.content == "Your basket includes..."
+    assert "🔗" in link_msg.content
+    assert "https://cloud.langfuse.com/trace/sess-xyz" in link_msg.content
+    assert link_msg.send_count == 1
+
+
+async def test_complete_omits_langfuse_link_when_host_not_configured() -> None:
+    """Default ``langfuse_host=None`` → no second message. Phase 3
+    behaviour preserved exactly."""
+    sink, fake = _make_sink_with_fake()
+    await sink.emit(
+        AgentEvent(
+            session_id="sess-xyz",
+            type=AgentEventType.COMPLETE,
+            payload={"final_answer": "ok"},
+        )
+    )
+    # Only the agent's final answer — no trace link
+    assert len(fake._created_messages) == 1
+    assert fake._created_messages[0].content == "ok"
+
+
+async def test_complete_strips_trailing_slash_from_langfuse_host() -> None:
+    """Tolerant of a trailing slash on the host URL — avoids double
+    slashes like 'https://cloud.langfuse.com//trace/...'."""
+    fake = _fake_chainlit_module()
+    sink = ChainlitSink(
+        chainlit_module=fake,
+        langfuse_host="https://cloud.langfuse.com/",
+    )
+    await sink.emit(
+        AgentEvent(
+            session_id="s1",
+            type=AgentEventType.COMPLETE,
+            payload={"final_answer": "ok"},
+        )
+    )
+    link_msg = fake._created_messages[1]
+    assert "https://cloud.langfuse.com/trace/s1" in link_msg.content
+    assert "langfuse.com//trace" not in link_msg.content
+
+
+# ---------- Phase 4: ContentSafetyError friendly rendering ----------
+
+
+async def test_mark_failed_renders_content_safety_friendly_message() -> None:
+    """Special-case for ContentSafetyError: render a friendly UI
+    message (categories, severity, rephrase guidance) instead of a raw
+    '❌ ContentSafetyError: ...' crash-looking notice."""
+    from framework.guardrails.content_safety import (
+        ContentSafetyError,
+        HarmCategory,
+        Severity,
+    )
+
+    sink, fake = _make_sink_with_fake()
+    err = ContentSafetyError(
+        gate="input",
+        blocking_categories=[HarmCategory.HATE, HarmCategory.VIOLENCE],
+        severity=Severity.HIGH,
+    )
+    await sink.mark_failed(err)
+    assert len(fake._created_messages) == 1
+    msg = fake._created_messages[0]
+    # Friendly tone (warning, not error); mentions categories + severity
+    assert "⚠️" in msg.content
+    assert "Hate" in msg.content
+    assert "Violence" in msg.content
+    assert "HIGH" in msg.content
+    assert "rephrase" in msg.content.lower()
+    # Crucially, NOT a "❌ ContentSafetyError" raw class-name dump
+    assert "ContentSafetyError" not in msg.content
+
+
+async def test_mark_failed_non_content_safety_error_uses_legacy_format() -> None:
+    """Non-CS errors still get the existing '❌ <ErrorClass>: <msg>'
+    rendering — no behaviour change for code crashes."""
+    sink, fake = _make_sink_with_fake()
+    await sink.mark_failed(RuntimeError("simulated agent crash"))
+    assert len(fake._created_messages) == 1
+    msg = fake._created_messages[0]
+    assert "❌" in msg.content
+    assert "RuntimeError" in msg.content
+    assert "simulated agent crash" in msg.content
+
+
+async def test_mark_failed_content_safety_clears_any_open_steps() -> None:
+    """If a step is open (somehow — input gate fires before PLAN_START
+    so this is theoretical, but defensive against a future
+    output-gate-raises variant), it gets marked errored along with the
+    friendly message."""
+    from framework.guardrails.content_safety import (
+        ContentSafetyError,
+        HarmCategory,
+        Severity,
+    )
+
+    sink, fake = _make_sink_with_fake()
+    # Open a step manually to simulate the defensive case
+    await sink.emit(
+        AgentEvent(
+            session_id="s1",
+            type=AgentEventType.PLAN_START,
+            payload={"goal": "g"},
+        )
+    )
+    open_step = fake._created_steps[0]
+    err = ContentSafetyError(
+        gate="output",
+        blocking_categories=[HarmCategory.SEXUAL],
+        severity=Severity.MEDIUM,
+    )
+    await sink.mark_failed(err)
+    # Open step got marked errored
+    assert open_step.is_error is True
+    assert "Content Safety block" in (open_step.output or "")
+    # Friendly user message also sent
+    assert len(fake._created_messages) == 1
+    assert "⚠️" in fake._created_messages[0].content

@@ -220,6 +220,40 @@ Applied to HelloAgenticAI 2026-05-11 (commit on `phase-3-fruitmarket` alongside 
 
 **Postscript — preview opacity at the property level (same session):** the env-wiring `azd provision` (between the env-wiring commit and the image-parameterization commit) reverted the Container App's image to the quickstart placeholder, because the Bicep module had the placeholder hardcoded as the parameter default (the design defect now captured in risk #4's "Wider lesson" paragraph). Crucially, the `--preview` summary did *not* surface this — it grouped both the env-block change and the image revert under one `* properties.template.containers` line. The baseline-vs-with-changes diff was byte-identical (except duration), giving false confidence that only the env vars would change. The image revert was caught **post-provision** via console logs (`Listening on :80...` instead of Chainlit on 8000), not in the preview. **Lesson:** when preview analysis is consequential, do not stop at the resource-level summary — drill into property-level state explicitly, e.g. `az containerapp show -n <name> -g <rg> --query "properties.template.containers[0].image" -o tsv` against the deployed resource, and reason about every property Bicep is going to assert (especially default-bearing ones). The preview's opaque grouping is a known azd limitation; defence is property-level inspection before provision, not after.
 
+### 9. OpenTelemetry SpanKind determines which App Insights table the data lands in
+
+**Surfaced in:** Phase 4 Batch 8 smoke test — the workbook charts showed empty data even though `AppInsightsSink` was successfully sending events. The user clicked through the workbook and saw "No data available" on every chart. AppInsightsSink container logs showed `Transmission succeeded: Item received: 8` lines, so events were definitely being exported. The mismatch was in the workbook's KQL.
+
+**Root cause:** Spans created via `tracer.start_as_current_span(name)` default to `SpanKind.INTERNAL`. The `azure-monitor-opentelemetry` exporter maps SpanKind to App Insights tables as follows:
+
+| SpanKind | App Insights table (Log Analytics schema name) |
+|---|---|
+| `SERVER` | `requests` (`AppRequests`) |
+| `CLIENT`, `PRODUCER`, `CONSUMER` | `dependencies` (`AppDependencies`) |
+| `INTERNAL` (default) | `dependencies` (`AppDependencies`) |
+
+The Phase 4 batch 7 workbook KQL queried `requests` (= `AppRequests`), but our `AppInsightsSink` emits INTERNAL spans, which land in `dependencies` (= `AppDependencies`). Backend was correct; workbook was querying the wrong table.
+
+**Workaround in tree:** Workbook KQL fixed to query `dependencies` instead of `requests` in `infra/workbooks/agent-observability.workbook.json` (7 occurrences). Header markdown also gained a "Why dependencies (not requests)" explainer pointing back to this risk entry, so future readers don't repeat the lookup.
+
+**Lesson for future projects:** When adding OTel-based workbooks (or KQL queries that aggregate App Insights spans), verify the SpanKind → table mapping **post-first-event-emission** with both queries:
+
+```kql
+AppRequests
+| where TimeGenerated > ago(15m)
+| where Name in ("plan_start", "plan_complete", ...)
+| summarize count() by Name
+
+AppDependencies
+| where TimeGenerated > ago(15m)
+| where Name in ("plan_start", "plan_complete", ...)
+| summarize count() by Name
+```
+
+Whichever returns non-zero rows is the right table. If you're emitting via `start_as_current_span(name)` (no explicit kind), it's `dependencies`. If you've explicitly set `SpanKind.SERVER` (e.g. for an HTTP request handler), it's `requests`. **Document the choice in the workbook JSON's comments so future readers don't have to rediscover it.**
+
+**Why the bug existed:** Phase 4 batch 7's pre-provision preview ran cleanly (workbook JSON was valid, ARM accepted the resource, no Bicep errors). The bug was only detectable **after** AppInsightsSink had emitted real events from a real run — i.e., post-deploy. A unit test on the workbook JSON wouldn't have caught it; verification requires live data ingestion. **For Phase 5 and beyond, workbook KQL changes should always be followed by a one-event smoke test before declaring victory.**
+
 ## Decision
 
 These seven risks are captured as this preflight runbook rather than mitigated in code. Specifically:

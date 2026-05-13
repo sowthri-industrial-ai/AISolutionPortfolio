@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from demo_fruitmarket.agent import FruitMarketAgent
 from demo_fruitmarket.graph import (
     FruitMarketContext,
@@ -225,3 +227,215 @@ def test_logging_sink_is_present_for_dev_visibility() -> None:
     ctx = build_fruit_market_context(llm=_mock_llm(), cosmos=_mock_cosmos())
     has_logging_sink = any(isinstance(s, LoggingSink) for s in ctx.agent._emitter.sinks)
     assert has_logging_sink
+
+
+# ---------- Phase 4: optional content_safety + AppInsightsSink + LangfuseSink ----------
+
+
+def test_factory_without_phase4_components_matches_phase_3_chain() -> None:
+    """No content_safety / app_insights_sink / langfuse_sink supplied →
+    the sink chain is exactly the Phase 3 chain (CosmosSink, LoggingSink).
+    Backward compatibility for every existing test."""
+    ctx = build_fruit_market_context(llm=_mock_llm(), cosmos=_mock_cosmos())
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    assert sink_types == ["CosmosSink", "LoggingSink"]
+    assert ctx.content_safety is None
+    assert ctx.agent._content_safety is None
+
+
+def test_factory_with_content_safety_passes_it_to_agent() -> None:
+    from framework.guardrails.content_safety import ContentSafetyClient
+
+    cs = ContentSafetyClient(endpoint="https://cs.example/")
+    ctx = build_fruit_market_context(
+        llm=_mock_llm(),
+        cosmos=_mock_cosmos(),
+        content_safety=cs,
+    )
+    assert ctx.content_safety is cs
+    assert ctx.agent._content_safety is cs
+
+
+def test_factory_with_app_insights_sink_appended_after_logging() -> None:
+    from framework.observability.app_insights import AppInsightsSink
+
+    ai = AppInsightsSink(connection_string=None)  # degraded mode, no real init
+    ctx = build_fruit_market_context(
+        llm=_mock_llm(),
+        cosmos=_mock_cosmos(),
+        app_insights_sink=ai,
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    # AppInsightsSink slots between LoggingSink and extra_sinks
+    assert sink_types == ["CosmosSink", "LoggingSink", "AppInsightsSink"]
+    assert ctx.agent._emitter.sinks[2] is ai
+
+
+def test_factory_with_langfuse_sink_appended_after_app_insights() -> None:
+    from framework.observability.app_insights import AppInsightsSink
+    from framework.observability.langfuse import LangfuseSink
+
+    ai = AppInsightsSink(connection_string=None)
+    lf = LangfuseSink(key_vault_endpoint=None)
+    ctx = build_fruit_market_context(
+        llm=_mock_llm(),
+        cosmos=_mock_cosmos(),
+        app_insights_sink=ai,
+        langfuse_sink=lf,
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    # Order: Cosmos (persistence) → Logging (dev) → AppInsights (queryable)
+    # → Langfuse (trace UI) → extras (UI sink). Stable contract.
+    assert sink_types == ["CosmosSink", "LoggingSink", "AppInsightsSink", "LangfuseSink"]
+
+
+def test_factory_with_only_langfuse_skips_app_insights_slot() -> None:
+    """A vertical project might wire Langfuse but not App Insights (or
+    vice versa). The chain just skips the missing slot."""
+    from framework.observability.langfuse import LangfuseSink
+
+    lf = LangfuseSink(key_vault_endpoint=None)
+    ctx = build_fruit_market_context(
+        llm=_mock_llm(),
+        cosmos=_mock_cosmos(),
+        langfuse_sink=lf,
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    assert sink_types == ["CosmosSink", "LoggingSink", "LangfuseSink"]
+
+
+def test_factory_extra_sinks_come_last_after_phase4_sinks() -> None:
+    from framework.observability.app_insights import AppInsightsSink
+    from framework.observability.langfuse import LangfuseSink
+
+    ai = AppInsightsSink(connection_string=None)
+    lf = LangfuseSink(key_vault_endpoint=None)
+    extra = InMemorySink()
+    ctx = build_fruit_market_context(
+        llm=_mock_llm(),
+        cosmos=_mock_cosmos(),
+        app_insights_sink=ai,
+        langfuse_sink=lf,
+        extra_sinks=[extra],
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    assert sink_types == [
+        "CosmosSink",
+        "LoggingSink",
+        "AppInsightsSink",
+        "LangfuseSink",
+        "InMemorySink",
+    ]
+
+
+# ---------- env-driven production factory ----------
+
+
+def test_from_endpoints_reads_phase4_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """build_fruit_market_context_from_endpoints constructs the optional
+    Phase 4 components from env vars. Test it without spinning up real
+    AOAI / Cosmos / KV clients — we just check the wiring decisions."""
+    from demo_fruitmarket.graph import build_fruit_market_context_from_endpoints
+
+    # Stub the LLM and Cosmos factories so we don't try to hit Azure.
+    fake_llm = _mock_llm()
+    fake_cosmos = _mock_cosmos()
+    monkeypatch.setattr(
+        "framework.llm.azure_openai.AzureOpenAIClient.from_endpoint",
+        classmethod(lambda cls, **kw: fake_llm),
+    )
+    monkeypatch.setattr(
+        "framework.memory.cosmos.CosmosProvider.from_endpoint",
+        classmethod(lambda cls, **kw: fake_cosmos),
+    )
+
+    monkeypatch.setenv("AZURE_CONTENT_SAFETY_ENDPOINT", "https://cs.example/")
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "InstrumentationKey=fake;...")
+    monkeypatch.setenv("AZURE_KEY_VAULT_ENDPOINT", "https://kv.example.vault.azure.net/")
+
+    ctx = build_fruit_market_context_from_endpoints(
+        aoai_endpoint="https://aoai.example/",
+        cosmos_endpoint="https://cosmos.example/",
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    assert sink_types == ["CosmosSink", "LoggingSink", "AppInsightsSink", "LangfuseSink"]
+    assert ctx.content_safety is not None
+    assert ctx.content_safety.endpoint == "https://cs.example/"
+
+
+def test_from_endpoints_absent_env_vars_match_phase_3_behaviour(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With none of the Phase 4 env vars set, the factory returns the
+    Phase 3 chain unchanged. The deployed Phase 3 demo at revision
+    --0000003 is exactly this state."""
+    from demo_fruitmarket.graph import build_fruit_market_context_from_endpoints
+
+    fake_llm = _mock_llm()
+    fake_cosmos = _mock_cosmos()
+    monkeypatch.setattr(
+        "framework.llm.azure_openai.AzureOpenAIClient.from_endpoint",
+        classmethod(lambda cls, **kw: fake_llm),
+    )
+    monkeypatch.setattr(
+        "framework.memory.cosmos.CosmosProvider.from_endpoint",
+        classmethod(lambda cls, **kw: fake_cosmos),
+    )
+    monkeypatch.delenv("AZURE_CONTENT_SAFETY_ENDPOINT", raising=False)
+    monkeypatch.delenv("APPLICATIONINSIGHTS_CONNECTION_STRING", raising=False)
+    monkeypatch.delenv("AZURE_KEY_VAULT_ENDPOINT", raising=False)
+
+    ctx = build_fruit_market_context_from_endpoints(
+        aoai_endpoint="https://aoai.example/",
+        cosmos_endpoint="https://cosmos.example/",
+    )
+    sink_types = [type(s).__name__ for s in ctx.agent._emitter.sinks]
+    assert sink_types == ["CosmosSink", "LoggingSink"]
+    assert ctx.content_safety is None
+
+
+# ---------- aclose covers Phase 4 owned resources ----------
+
+
+async def test_aclose_closes_content_safety_when_present() -> None:
+    from framework.guardrails.content_safety import ContentSafetyClient
+
+    cs = ContentSafetyClient(endpoint="https://cs.example/")
+    cs.close = AsyncMock()  # type: ignore[method-assign]
+    llm, cosmos = _mock_llm(), _mock_cosmos()
+    ctx = build_fruit_market_context(llm=llm, cosmos=cosmos, content_safety=cs)
+    await ctx.aclose()
+    cs.close.assert_awaited_once()
+
+
+async def test_aclose_closes_owned_sinks() -> None:
+    from framework.observability.app_insights import AppInsightsSink
+    from framework.observability.langfuse import LangfuseSink
+
+    ai = AppInsightsSink(connection_string=None)
+    lf = LangfuseSink(key_vault_endpoint=None)
+    # LangfuseSink has an async close; AppInsightsSink doesn't define one.
+    # aclose should handle both gracefully.
+    lf.close = AsyncMock()  # type: ignore[method-assign]
+    llm, cosmos = _mock_llm(), _mock_cosmos()
+    ctx = build_fruit_market_context(
+        llm=llm,
+        cosmos=cosmos,
+        app_insights_sink=ai,
+        langfuse_sink=lf,
+    )
+    await ctx.aclose()
+    lf.close.assert_awaited_once()
+
+
+async def test_aclose_continues_when_one_closer_raises() -> None:
+    """A failing close on one resource must not skip closes on the others.
+    Observability flush errors at shutdown shouldn't leak Cosmos / LLM
+    handles."""
+    llm, cosmos = _mock_llm(), _mock_cosmos()
+    llm.close = AsyncMock(side_effect=RuntimeError("simulated LLM close failure"))
+    ctx = build_fruit_market_context(llm=llm, cosmos=cosmos)
+    # Should not raise
+    await ctx.aclose()
+    # cosmos still closed despite LLM failure
+    cosmos.close.assert_awaited_once()

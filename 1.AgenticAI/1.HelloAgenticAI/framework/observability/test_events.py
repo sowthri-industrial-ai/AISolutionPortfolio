@@ -22,9 +22,13 @@ from framework.observability.events import (
 # ---------- AgentEventType ----------
 
 
-def test_agent_event_type_has_six_canonical_values() -> None:
-    """The six minimum events agreed for Phase 2."""
-    expected = {
+def test_agent_event_type_includes_phase_2_canonical_six() -> None:
+    """The six minimum events agreed for Phase 2 remain present as
+    Phase 4 (and later) adds more types. This is a *subset* check, not
+    an equality check — Phase 4's ``SCHEMA_VALIDATION_FAILED`` and
+    follow-ons (``GUARDRAIL_BLOCKED`` etc.) are expected additions, not
+    failures."""
+    phase_2_canonical = {
         "plan_start",
         "plan_complete",
         "tool_call",
@@ -32,7 +36,24 @@ def test_agent_event_type_has_six_canonical_values() -> None:
         "reflect",
         "complete",
     }
-    assert {t.value for t in AgentEventType} == expected
+    actual = {t.value for t in AgentEventType}
+    assert (
+        phase_2_canonical <= actual
+    ), f"Phase 2 canonical events missing from enum: {phase_2_canonical - actual}"
+
+
+def test_agent_event_type_includes_phase_4_schema_validation_failed() -> None:
+    """Phase 4 deliverable 1 — explicit assertion that the new event type
+    is wired into the enum (and not accidentally removed by a future
+    refactor)."""
+    assert AgentEventType.SCHEMA_VALIDATION_FAILED.value == "schema_validation_failed"
+
+
+def test_agent_event_type_includes_phase_4_guardrail_blocked() -> None:
+    """Phase 4 deliverable 2 — Content Safety input/output gates emit
+    ``GUARDRAIL_BLOCKED`` when the verdict is BLOCK. Explicit presence
+    assertion to prevent silent regression."""
+    assert AgentEventType.GUARDRAIL_BLOCKED.value == "guardrail_blocked"
 
 
 def test_agent_event_type_is_string_enum() -> None:
@@ -199,15 +220,24 @@ async def test_logging_sink_logs(caplog: pytest.LogCaptureFixture) -> None:
     assert "session=s1" in caplog.text
 
 
-# ---------- Phase 3 / 4 stubs ----------
+# ---------- Phase 4 sinks (real impls + remaining stubs) ----------
 
 
-async def test_stub_sinks_implement_protocol_and_dont_raise() -> None:
-    """All Phase 4 stubs satisfy EventSink and complete without error."""
+async def test_sinks_satisfy_event_sink_protocol_and_dont_raise() -> None:
+    """All Phase 4 sinks satisfy :class:`EventSink` and complete without
+    error on the degraded/unconfigured paths.
+
+    Both :class:`AppInsightsSink` and :class:`LangfuseSink` take their
+    ``None``-arg pass-through path (logs a warning, no-ops emit). Real-
+    init behaviour is exercised in
+    :mod:`framework.observability.test_app_insights` and
+    :mod:`framework.observability.test_langfuse` respectively, with
+    mocked SDK boundaries. :class:`UIStreamSink` remains a Phase 2-style
+    stub — the live UI uses :mod:`demo_fruitmarket.ui.chainlit_sink`."""
     e = AgentEvent(session_id="s1", type=AgentEventType.COMPLETE)
     for sink in (
-        AppInsightsSink(connection_string="ignored-in-stub"),
-        LangfuseSink(),
+        AppInsightsSink(connection_string=None),
+        LangfuseSink(key_vault_endpoint=None),
         UIStreamSink(),
     ):
         await sink.emit(e)

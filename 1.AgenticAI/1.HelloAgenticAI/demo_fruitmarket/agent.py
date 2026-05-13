@@ -38,6 +38,7 @@ from framework.agents.base import (
     ReflectionDecision,
     ToolDecision,
 )
+from framework.guardrails.content_safety import ContentSafetyClient
 from framework.llm.azure_openai import AzureOpenAIClient
 from framework.observability.events import AgentEventEmitter
 from framework.tools.base import ToolRegistry
@@ -104,6 +105,7 @@ class FruitMarketAgent(AgentBase):
         tools: ToolRegistry,
         llm: AzureOpenAIClient,
         max_iterations: int = 4,
+        content_safety: ContentSafetyClient | None = None,
         planner_prompt: str | None = None,
         router_prompt: str | None = None,
         reflector_prompt: str | None = None,
@@ -113,6 +115,7 @@ class FruitMarketAgent(AgentBase):
             emitter=emitter,
             tools=tools,
             max_iterations=max_iterations,
+            content_safety=content_safety,
         )
         self._llm = llm
         self._planner_prompt = planner_prompt or load_prompt("planner")

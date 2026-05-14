@@ -11,3 +11,13 @@ infra/placeholder/package-lock.json
 # F3 Stage 3 advisory state — runtime mutable, persists across restarts
 2.automation/stage3/advisories.json
 2.automation/stage3/advisories.json.tmp
+
+# F3 MCP server / agent venv — Python 3.11, separate from .venv-x86
+# (DWSIM Mono x86/Python 3.9 venv stays untouched)
+2.automation/f3/.venv/
+2.automation/f3/__pycache__/
+2.automation/f3/*.log
+
+# F3 probe scratch output — diagnostic only, not source of truth
+2.automation/f3/probe_*_output.txt
+2.automation/f3/probe_output.txt

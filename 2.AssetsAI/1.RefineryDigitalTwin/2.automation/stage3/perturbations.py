@@ -64,6 +64,29 @@ def make_setpoint_id(owner_type: str, owner_tag: str, property_key: str) -> str:
     return f"{prefix}-{_normalize_tag(owner_tag)}.{property_key}"
 
 
+# (owner_type, property_key) → reason. Catalog-level override for entries
+# that *look* perturbable from the Phase 0a dictionary (numeric + bounds)
+# but in practice cannot be perturbed at runtime — usually because DWSIM
+# re-initialises them from configured state on each solve, so a write
+# succeeds for one read and then reverts. Keep these in the read catalog
+# (the tag still surfaces in /tags + /setpoints) but reject any write
+# attempt with HTTP 422 and the documented reason.
+#
+# Add entries here when an empirical probe confirms write-then-revert and
+# the reset is structural inside DWSIM (i.e. not fixable from our side).
+NON_PERTURBABLE_OVERRIDES: dict[tuple[str, str], str] = {
+    ("Recycle", "MaximumIterations"): (
+        "DWSIM's Recycle block re-initialises MaximumIterations from its "
+        "configured state at the start of every solve cycle. The reflection "
+        "write persists for one read (verified at commit 8425d49: "
+        "persisted_through_solve=true, immediate=60, post-solve=60), but "
+        "subsequent cycles reset to the configured value (50). Treat as "
+        "read-only at runtime. To raise the cap, edit the .dwxmz substrate "
+        "directly and reload."
+    ),
+}
+
+
 def utc_iso() -> str:
     return (
         datetime.now(timezone.utc)
@@ -88,7 +111,16 @@ class SetpointCatalog:
         self.by_id: dict[str, dict] = {}
         for e in entries:
             sid = make_setpoint_id(e["owner_type"], e["owner_tag"], e["property_key"])
-            self.by_id[sid] = dict(e, setpoint_id=sid)
+            entry = dict(e, setpoint_id=sid)
+            override_key = (entry.get("owner_type"), entry.get("property_key"))
+            override_reason = NON_PERTURBABLE_OVERRIDES.get(override_key)
+            if override_reason is not None:
+                # Flip perturbable → False and stamp the reason so downstream
+                # consumers (validate_write, /setpoints listings, MCP tool
+                # surfaces) can explain WHY this read-only entry is read-only.
+                entry["perturbable"] = False
+                entry["non_perturbable_reason"] = override_reason
+            self.by_id[sid] = entry
 
     def get(self, setpoint_id: str) -> Optional[dict]:
         return self.by_id.get(setpoint_id)
@@ -105,6 +137,11 @@ class SetpointCatalog:
         if entry is None:
             return False, f"unknown setpoint_id: {setpoint_id!r}", None
         if not entry.get("perturbable"):
+            override_reason = entry.get("non_perturbable_reason")
+            if override_reason:
+                return False, (
+                    f"setpoint is not perturbable: {override_reason}"
+                ), entry
             return False, (
                 f"setpoint is not perturbable "
                 f"(bounds_kind={entry.get('bounds_kind')!r})"

@@ -1,0 +1,35 @@
+---
+// Batch 1 smoke page. Confirms the scaffold renders + Tailwind
+// classes resolve. Real home-page wiring (intro + Now hero + three
+// TrackSections + ProjectCards) lands in Batch 3 once the content
+// collection (Batch 2) and the components (also Batch 3) exist.
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="AI Solution Portfolio · Sowthri Somasundaram"
+  description="Production-grade AI engineering portfolio — agentic AI, assets AI, and physical AI projects on Azure."
+>
+  <h1 class="mb-4 text-4xl font-bold tracking-tight text-slate-900">Site scaffold live</h1>
+  <p class="mb-6 text-lg text-slate-700">
+    This is the Phase 5a Batch 1 smoke page. Astro + Tailwind are wired and the base layout (header,
+    main, footer) is rendering.
+  </p>
+  <ul class="list-disc space-y-1 pl-6 text-slate-700">
+    <li>
+      Batch 2 — content collection schema + project entries (HelloAgenticAI, RefineryDigitalTwin)
+    </li>
+    <li>
+      Batch 3 — <code class="rounded bg-slate-200 px-1 py-0.5 text-sm">&lt;TrackSection&gt;</code> + <code
+        class="rounded bg-slate-200 px-1 py-0.5 text-sm">&lt;ProjectCard&gt;</code
+      > + home-page wiring (this page replaced)
+    </li>
+    <li>
+      Batch 4 — individual project profile pages at <code
+        class="rounded bg-slate-200 px-1 py-0.5 text-sm">/projects/&lt;slug&gt;</code
+      >
+    </li>
+    <li>Batch 5 — Azure Static Web Apps Bicep (provision approval gate)</li>
+    <li>Batch 6 — deploy + smoke + README + PR #6</li>
+  </ul>
+</BaseLayout>

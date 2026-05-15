@@ -331,8 +331,299 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /setpoints/{setpoint_id}/value:
+    post:
+      tags:
+      - setpoints
+      summary: Setpoints Write
+      description: "Queue a perturbation request to Stage 2's inbox. Stage 2 applies\
+        \ at\nthe next solve cycle boundary; the next snapshot will reflect the new\n\
+        value.\n\nValidation gate (Q3 default (b) — perturbable list + bounds check):\n\
+        \  - 404 if setpoint_id is unknown\n  - 422 if setpoint is non-perturbable\n\
+        \  - 422 if value is out of the dictionary's bounds.low / bounds.high\n  -\
+        \ 422 if value is non-numeric (bool, string, null)\n\nInspect the result via\
+        \ the inbox: <inbox>/<request_id>.applied or\n.failed will appear within ~1\
+        \ cycle (~30 s)."
+      operationId: setpoints_write_setpoints__setpoint_id__value_post
+      parameters:
+      - name: setpoint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Setpoint Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetpointWriteRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetpointWriteResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /advisories:
+    post:
+      tags:
+      - advisories
+      summary: Advisory Create
+      description: 'Create a pending advisory. Same setpoint validation gate as
+
+        POST /setpoints/{id}/value — 404 on unknown setpoint, 422 on
+
+        non-perturbable / out-of-bounds / non-numeric.'
+      operationId: advisory_create_advisories_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvisoryCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advisory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - advisories
+      summary: Advisory List
+      description: List advisories, newest-first. Optional filter by state.
+      operationId: advisory_list_advisories_get
+      parameters:
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(pending|approved|rejected)$
+          - type: 'null'
+          description: Filter by state. Omit to list all.
+          title: State
+        description: Filter by state. Omit to list all.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Advisory'
+                title: Response Advisory List Advisories Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /advisories/{advisory_id}/approve:
+    post:
+      tags:
+      - advisories
+      summary: Advisory Approve
+      description: "Approve a pending advisory: enqueues a perturbation request into\n\
+        Stage 2's inbox using the same atomic-file protocol as direct\nsetpoint writes.\
+        \ Returns the updated advisory with\n`perturbation_request_id` set.\n\nStatus\
+        \ codes:\n  201 success (returns full Advisory with state=\"approved\")\n\
+        \  404 advisory_not_found\n  409 already approved or rejected\n  422 setpoint\
+        \ validation failed at approval time (rare; catalog\n      changed between\
+        \ create and approve)"
+      operationId: advisory_approve_advisories__advisory_id__approve_post
+      parameters:
+      - name: advisory_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Advisory Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvisoryApproveRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advisory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /advisories/{advisory_id}/reject:
+    post:
+      tags:
+      - advisories
+      summary: Advisory Reject
+      description: 'Reject a pending advisory; no perturbation enqueued. Same 404/409
+
+        semantics as approve.'
+      operationId: advisory_reject_advisories__advisory_id__reject_post
+      parameters:
+      - name: advisory_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Advisory Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvisoryRejectRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advisory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    Advisory:
+      properties:
+        advisory_id:
+          type: string
+          title: Advisory Id
+        setpoint_id:
+          type: string
+          title: Setpoint Id
+        target_value:
+          type: number
+          title: Target Value
+        rationale:
+          type: string
+          title: Rationale
+        state:
+          type: string
+          title: State
+        created_at:
+          type: string
+          title: Created At
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created By
+        approved_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved At
+        approved_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved By
+        rejected_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejected At
+        rejected_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejected By
+        rejected_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejected Reason
+        perturbation_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Perturbation Request Id
+      type: object
+      required:
+      - advisory_id
+      - setpoint_id
+      - target_value
+      - rationale
+      - state
+      - created_at
+      title: Advisory
+    AdvisoryApproveRequest:
+      properties:
+        approved_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved By
+          default: operator
+      type: object
+      title: AdvisoryApproveRequest
+    AdvisoryCreateRequest:
+      properties:
+        setpoint_id:
+          type: string
+          title: Setpoint Id
+        target_value:
+          type: number
+          title: Target Value
+        rationale:
+          type: string
+          title: Rationale
+          description: Why this change is being recommended. Operator reads this when
+            deciding to approve/reject.
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created By
+          description: Caller identifier. Agent sets this to its tool/session ID.
+          default: agent
+      type: object
+      required:
+      - setpoint_id
+      - target_value
+      - rationale
+      title: AdvisoryCreateRequest
+    AdvisoryRejectRequest:
+      properties:
+        rejected_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejected By
+          default: operator
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      title: AdvisoryRejectRequest
     HTTPValidationError:
       properties:
         detail:
@@ -619,6 +910,54 @@ components:
       - truncated
       - snapshots
       title: RangeResponse
+    SetpointWriteRequest:
+      properties:
+        value:
+          type: number
+          title: Value
+        requested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requested By
+          description: Free-form caller hint. Agent should set this to its tool/session
+            ID.
+          default: stage3_api
+      type: object
+      required:
+      - value
+      title: SetpointWriteRequest
+    SetpointWriteResponse:
+      properties:
+        request_id:
+          type: string
+          title: Request Id
+        setpoint_id:
+          type: string
+          title: Setpoint Id
+        queued_value:
+          type: number
+          title: Queued Value
+        status:
+          type: string
+          title: Status
+        enqueued_at:
+          type: string
+          title: Enqueued At
+        note:
+          type: string
+          title: Note
+          default: Perturbation queued to Stage 2 inbox; applied at the next solve
+            cycle boundary. Inspect <inbox_dir>/<request_id>.applied or .failed for
+            the result.
+      type: object
+      required:
+      - request_id
+      - setpoint_id
+      - queued_value
+      - status
+      - enqueued_at
+      title: SetpointWriteResponse
     Snapshot:
       properties:
         timestamp:

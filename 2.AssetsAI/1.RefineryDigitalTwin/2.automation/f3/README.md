@@ -6,6 +6,23 @@ the agent reads live values, recommends actions, and the operator
 approves/rejects. Direct perturbation is available but cautious by
 default.
 
+> **F3 close-out status — COMPLETE.** Commits C3–C6 on
+> `phase-6-agents`:
+> - **C3** catalog filter (`Recycle.MaximumIterations` →
+>   non-perturbable; DWSIM resets it each cycle)
+> - **C4** MCP server, 9 tools over stdio — verified e2e (8/9 tools
+>   exercised; `approve_advisory` structurally identical to the verified
+>   `reject_advisory`)
+> - **C5** LangGraph agent + CLI — verified behaviourally (pure read /
+>   read-before-recommend / confirmation-gate on direct perturb /
+>   out-of-bounds refusal; MemorySaver continuity solid)
+> - **C6** OpenAPI regen (17 ops) + 28-test regression suite (green) +
+>   these close-out notes
+>
+> Known issues are parked in the **Backlog** section below — none block
+> the F3 demo path. Highest priority post-close-out is the pump
+> bounds-units bug (the C5 agent caught it unprompted).
+
 ## Architecture
 
 ```
@@ -65,6 +82,8 @@ One-time, from this directory (`2.automation/f3/`):
 /opt/homebrew/bin/python3.11 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install mcp httpx langgraph langchain-anthropic langchain-mcp-adapters
+# regression suite extras (Stage 3 is DWSIM-free so it runs in this venv):
+.venv/bin/pip install fastapi "uvicorn[standard]" pyyaml pytest
 ```
 
 Versions confirmed working (May 2026):
@@ -159,6 +178,38 @@ Posture is set by `prompts.SYSTEM_PROMPT`. Edit there to tune behaviour.
   temperatures and distillate composition after approval.
 ```
 
+## Regression suite
+
+`test_f3_regression.py` — 28 tests, the F3 close-out gate. Runs in this
+venv (Stage 3 is DWSIM-free; `streamer.py` defers its `clr` imports, so
+both import cleanly under Python 3.11):
+
+```bash
+.venv/bin/python -m pytest test_f3_regression.py -v
+```
+
+Four areas:
+
+1. **Endpoint shapes** — every Stage 3 route (F1 read + F2 ontology + F3
+   write/advisory) returns the expected status + schema; bad-param and
+   not-found paths return the right 4xx.
+2. **Strategy dispatch** — `WRITE_STRATEGIES` has all four families
+   (`reflection`, `reflection_int`, `calc_mode`, `column_spec`), the four
+   representative mappings resolve, and **every perturbable catalog entry
+   has a strategy** (the cross-reference that protects the demo from a
+   "perturbable but no write path" regression).
+3. **Advisory lifecycle** — create → list → reject; create → approve →
+   inbox file enqueued + `perturbation_request_id` stamped;
+   double-resolve → 409.
+4. **`NON_PERTURBABLE_OVERRIDES` enforcement** — `Recycle.MaximumIterations`
+   stays in the read catalog but rejects both direct writes and advisory
+   creation with 422.
+
+The suite redirects the perturbation inbox + advisory store to a
+throwaway tempdir, so it never touches real runtime state. Env vars are
+wired at module import time (api.State reads env at class-definition
+time, before `import api`).
+
 ## Backlog (captured by operator, not yet acted on)
 
 These were filed during C4 verification + C5 wiring; addressing them
@@ -206,9 +257,11 @@ belongs to a follow-up commit cycle.
 ```
 2.automation/f3/
 ├── README.md          (this file)
-├── mcp_server.py      FastMCP server, 9 tools, stdio transport
-├── agent.py           LangGraph ReAct agent build
-├── cli.py             REPL entry point
-├── prompts.py         system prompt (single source of truth for posture)
-└── .venv/             Python 3.11 venv (gitignored)
+├── mcp_server.py            FastMCP server, 9 tools, stdio transport
+├── agent.py                 LangGraph ReAct agent build
+├── cli.py                   REPL entry point
+├── prompts.py               system prompt (single source of truth for posture)
+├── test_f3_regression.py    F3 close-out regression (28 tests)
+├── probe_*.py               diagnostic scratch (gitignored — see .gitignore)
+└── .venv/                   Python 3.11 venv (gitignored)
 ```

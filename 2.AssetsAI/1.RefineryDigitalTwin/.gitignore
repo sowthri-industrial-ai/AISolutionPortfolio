@@ -16,6 +16,7 @@ infra/placeholder/package-lock.json
 # (DWSIM Mono x86/Python 3.9 venv stays untouched)
 2.automation/f3/.venv/
 2.automation/f3/__pycache__/
+2.automation/f3/.pytest_cache/
 2.automation/f3/*.log
 
 # F3 probe scratch — diagnostic only, not source of truth.

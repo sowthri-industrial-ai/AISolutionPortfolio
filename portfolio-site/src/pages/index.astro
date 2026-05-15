@@ -1,35 +1,38 @@
 ---
-// Batch 1 smoke page. Confirms the scaffold renders + Tailwind
-// classes resolve. Real home-page wiring (intro + Now hero + three
-// TrackSections + ProjectCards) lands in Batch 3 once the content
-// collection (Batch 2) and the components (also Batch 3) exist.
+// Home page — one-pager listing all three tracks. Page sequence:
+//   1. <Header>          (from BaseLayout)
+//   2. Page heading + intro paragraph
+//   3. <NowHero>         (current snapshot, loaded from now/current.md)
+//   4. <TrackSection track="agentic-ai">
+//   5. <TrackSection track="assets-ai">
+//   6. <TrackSection track="physical-ai">  (renders "Coming soon" — no entries)
+//   7. <Footer>          (from BaseLayout)
+//
+// All track titles + descriptions live inside <TrackSection> for
+// centralised editing. Project entries are filtered + sorted by the
+// component using the content collection.
+
 import BaseLayout from '../layouts/BaseLayout.astro';
+import NowHero from '../components/NowHero.astro';
+import TrackSection from '../components/TrackSection.astro';
 ---
 
 <BaseLayout
   title="AI Solution Portfolio · Sowthri Somasundaram"
-  description="Production-grade AI engineering portfolio — agentic AI, assets AI, and physical AI projects on Azure."
+  description="Production-grade AI engineering portfolio — agentic AI, industrial assets AI, and physical AI projects on Azure."
 >
-  <h1 class="mb-4 text-4xl font-bold tracking-tight text-slate-900">Site scaffold live</h1>
-  <p class="mb-6 text-lg text-slate-700">
-    This is the Phase 5a Batch 1 smoke page. Astro + Tailwind are wired and the base layout (header,
-    main, footer) is rendering.
+  <h1 class="mb-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+    AI Solution Portfolio
+  </h1>
+  <p class="mb-10 max-w-3xl text-base leading-relaxed text-slate-700 sm:text-lg">
+    I'm Sowthri Somasundaram, an Industrial AI Solution Architect based in Chennai. This portfolio
+    collects production-quality systems I've built on Azure, organized into three tracks: Agentic
+    AI, Industrial Assets AI, and Physical AI.
   </p>
-  <ul class="list-disc space-y-1 pl-6 text-slate-700">
-    <li>
-      Batch 2 — content collection schema + project entries (HelloAgenticAI, RefineryDigitalTwin)
-    </li>
-    <li>
-      Batch 3 — <code class="rounded bg-slate-200 px-1 py-0.5 text-sm">&lt;TrackSection&gt;</code> + <code
-        class="rounded bg-slate-200 px-1 py-0.5 text-sm">&lt;ProjectCard&gt;</code
-      > + home-page wiring (this page replaced)
-    </li>
-    <li>
-      Batch 4 — individual project profile pages at <code
-        class="rounded bg-slate-200 px-1 py-0.5 text-sm">/projects/&lt;slug&gt;</code
-      >
-    </li>
-    <li>Batch 5 — Azure Static Web Apps Bicep (provision approval gate)</li>
-    <li>Batch 6 — deploy + smoke + README + PR #6</li>
-  </ul>
+
+  <NowHero />
+
+  <TrackSection track="agentic-ai" />
+  <TrackSection track="assets-ai" />
+  <TrackSection track="physical-ai" />
 </BaseLayout>

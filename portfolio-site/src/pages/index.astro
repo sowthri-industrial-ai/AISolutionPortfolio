@@ -1,7 +1,7 @@
 ---
 // Home page — one-pager listing all three tracks. Page sequence:
 //   1. <Header>          (from BaseLayout)
-//   2. Page heading + intro paragraph
+//   2. Hero block — 96px headshot + page heading + intro paragraph
 //   3. <NowHero>         (current snapshot, loaded from now/current.md)
 //   4. <TrackSection track="agentic-ai">
 //   5. <TrackSection track="assets-ai">
@@ -11,6 +11,11 @@
 // All track titles + descriptions live inside <TrackSection> for
 // centralised editing. Project entries are filtered + sorted by the
 // component using the content collection.
+//
+// Headshot: 96px circular crop, sourced from /public/headshot.jpg.
+// Header chrome on every page also references the same file at 40px;
+// dropping the file at portfolio-site/public/headshot.jpg makes both
+// instances live simultaneously.
 
 import BaseLayout from '../layouts/BaseLayout.astro';
 import NowHero from '../components/NowHero.astro';
@@ -21,14 +26,25 @@ import TrackSection from '../components/TrackSection.astro';
   title="AI Solution Portfolio · Sowthri Somasundaram"
   description="Production-grade AI engineering portfolio — agentic AI, industrial assets AI, and physical AI projects on Azure."
 >
-  <h1 class="mb-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-    AI Solution Portfolio
-  </h1>
-  <p class="mb-10 max-w-3xl text-base leading-relaxed text-slate-700 sm:text-lg">
-    I'm Sowthri Somasundaram, an Industrial AI Solution Architect based in Chennai. This portfolio
-    collects production-quality systems I've built on Azure, organized into three tracks: Agentic
-    AI, Industrial Assets AI, and Physical AI.
-  </p>
+  {/* Hero — 96px headshot above heading + intro */}
+  <section class="mb-10">
+    <img
+      src="/headshot.jpg"
+      alt="Sowthri Somasundaram"
+      width="96"
+      height="96"
+      class="mb-5 h-24 w-24 rounded-full object-cover ring-2 ring-slate-200"
+      loading="eager"
+    />
+    <h1 class="mb-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      AI Solution Portfolio
+    </h1>
+    <p class="max-w-3xl text-base leading-relaxed text-slate-700 sm:text-lg">
+      I'm Sowthri Somasundaram, an Industrial AI Solution Architect based in Chennai. This portfolio
+      collects production-quality systems I've built on Azure, organized into three tracks: Agentic
+      AI, Industrial Assets AI, and Physical AI.
+    </p>
+  </section>
 
   <NowHero />
 

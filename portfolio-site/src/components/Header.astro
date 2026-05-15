@@ -1,17 +1,41 @@
 ---
-// Site header. Owner branding on the left, single nav link on the
-// right (just Home in v1; about/blog/etc. deferred). Same chrome
-// every page sees via BaseLayout.
+// Site header. Small (40px) headshot circle + owner name + portfolio
+// label on the left; single nav link on the right (just Home in v1).
+//
+// Headshot file lives at /public/headshot.jpg — referenced via
+// absolute path so it loads from the site root regardless of which
+// page the header is on. If the file is absent, browsers render a
+// broken-image icon next to the name; drop the file at
+// portfolio-site/public/headshot.jpg to fix.
+//
+// Width/height attributes are set to match the rendered size (40px)
+// so the browser reserves layout space before the image loads —
+// avoids cumulative-layout-shift jitter on slow connections.
 ---
 
 <header class="border-b border-slate-200 bg-white">
-  <div class="container mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
-    <a href="/" class="text-lg font-semibold text-slate-900 transition-colors hover:text-slate-600">
-      Sowthri Somasundaram
-      <span class="hidden font-normal text-slate-500 sm:inline">· AI Solution Portfolio</span>
+  <div class="container mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+    <a
+      href="/"
+      class="flex items-center gap-3 text-slate-900 transition-colors hover:text-slate-700"
+    >
+      <img
+        src="/headshot.jpg"
+        alt="Sowthri Somasundaram"
+        width="40"
+        height="40"
+        class="h-10 w-10 rounded-full object-cover ring-1 ring-slate-200"
+        loading="eager"
+      />
+      <span class="flex flex-col leading-tight sm:flex-row sm:items-baseline sm:gap-2">
+        <span class="text-base font-semibold sm:text-lg">Sowthri Somasundaram</span>
+        <span class="hidden text-sm font-normal text-slate-500 sm:inline"
+          >· AI Solution Portfolio</span
+        >
+      </span>
     </a>
     <nav class="text-sm">
-      <a href="/" class="text-slate-600 transition-colors hover:text-slate-900"> Home </a>
+      <a href="/" class="text-slate-600 transition-colors hover:text-slate-900">Home</a>
     </nav>
   </div>
 </header>

@@ -1,0 +1,25 @@
+---
+// Dynamic route — generates one static page per project entry.
+// `[...slug]` (rest syntax) keeps room for nested paths in v2
+// (e.g. /projects/<slug>/architecture) without a route migration;
+// today every project is a single segment, so params.slug is just
+// the entry id (= filename stem of src/content/projects/<id>.md).
+
+import { getCollection, render } from 'astro:content';
+import ProjectProfile from '../../layouts/ProjectProfile.astro';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects');
+  return projects.map((project) => ({
+    params: { slug: project.id },
+    props: { project },
+  }));
+}
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+---
+
+<ProjectProfile project={project}>
+  <Content />
+</ProjectProfile>

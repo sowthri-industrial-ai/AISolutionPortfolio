@@ -254,6 +254,49 @@ Whichever returns non-zero rows is the right table. If you're emitting via `star
 
 **Why the bug existed:** Phase 4 batch 7's pre-provision preview ran cleanly (workbook JSON was valid, ARM accepted the resource, no Bicep errors). The bug was only detectable **after** AppInsightsSink had emitted real events from a real run — i.e., post-deploy. A unit test on the workbook JSON wouldn't have caught it; verification requires live data ingestion. **For Phase 5 and beyond, workbook KQL changes should always be followed by a one-event smoke test before declaring victory.**
 
+### 10. `azd provision --preview` is ARM What-If, not full ARM validation
+
+**Surfaced in:** Phase 5a Batch 5 (portfolio-site Static Web App) — **two consecutive** real-provision failures, each after `azd provision --preview` had reported a clean two-resource plan and `az bicep build` had compiled without error.
+
+**Failure mode A — resource-type region availability.** `--preview` showed `Create : Static Web App` cleanly in `swedencentral`. Actual `azd provision` failed at ARM's *Validating deployment* step, zero resources created:
+
+```
+LocationNotAvailableForResourceType: The provided location 'swedencentral'
+is not available for resource type 'Microsoft.Web/staticSites'. List of
+available regions ... 'centralus,eastus2,westus2,westeurope,eastasia'.
+```
+
+`Microsoft.Web/staticSites` is a globally-distributed service whose control plane is offered in only five regions; swedencentral is not one. SWA region is only a control-plane/metadata anchor — content serves from a global edge network regardless — so the user-facing impact of relocating is nil. **Resolution:** `azd env set AZURE_LOCATION westeurope` (closest supported, stays in EU geography, keeps the cross-region link to the swedencentral Phase 1 LAW within the EU), co-locating RG+SWA. No Bicep change.
+
+**Failure mode B — diagnostic-settings category name strings.** After the region fix, `--preview` again showed a clean plan. Actual `azd provision` created the RG + SWA, then failed on the `diagnosticSettings` child:
+
+```
+BadRequest: Category 'StaticWebAppLogs' is not supported.
+```
+
+`StaticWebAppLogs` was inferred from documentation/memory and **does not exist**. Bicep's `category` field is a free-form `string`; both `az bicep build` and `--preview` What-If accept any string. The real category names, queried from the **live** SWA, are `StaticSiteHttpLogs` and `StaticSiteDiagnosticLogs` (+ `AllMetrics` for metrics). Partial state: RG+SWA created and healthy, diagnosticSettings absent. **Resolution:** corrected categories in `swa.bicep`; idempotent re-provision created `swa-to-law` (RG+SWA no-op'd, same hostname).
+
+**Root cause (both):** `azd provision --preview` runs an ARM What-If that resolves the *deployment graph* but does **not** execute full per-resource validation — it skips resource-type/region availability and accepts arbitrary enum-like string properties (diagnostic categories, SKUs, kinds). Those are validated only at real `azd provision` (ARM `Validating deployment` for region; the resource provider's own deploy-time validation for category strings). `az bicep build` is a compile/type check and catches neither — both `StaticWebAppLogs` and `swedencentral` are type-valid `string`s.
+
+**Workaround in tree:** none — accept that `--preview` + `az bicep build` clear a *subset* of validation, not all of it. Mitigation is documentation discipline: record verified supported regions and verified diagnostic categories *in the Bicep module's header comments* when introducing a new resource type (applied in `portfolio-site/infra/modules/swa.bicep` — categories annotated "verified LIVE via az monitor diagnostic-settings categories list").
+
+**Verification protocol — before adding a new resource type or a diagnostic-settings child:**
+
+1. **Region availability** of the resource type (read-only, no resource needed):
+   ```bash
+   az provider show -n Microsoft.Web \
+     --query "resourceTypes[?resourceType=='staticSites'].locations" -o tsv
+   ```
+   Don't assume "we use swedencentral for everything" — many global/PaaS services have a narrow control-plane region footprint.
+
+2. **Diagnostic-settings categories** must be queried from a **live** resource of that type — ARM accepts arbitrary strings at template-build time and only validates at actual provision:
+   ```bash
+   az monitor diagnostic-settings categories list --resource <resource-id>
+   ```
+   This requires the parent resource to exist. For a first-of-its-type resource the only reliable path is **split provisioning**: (1) provision the parent alone, (2) query its live categories, (3) add the `diagnosticSettings` child to the Bicep, (4) re-provision (idempotent — parent is no-op'd). Do **not** infer category names from documentation alone; the docs lag the API and the names are not guessable (`StaticSiteHttpLogs`, not `StaticWebAppLogs`).
+
+**Discovery cost:** ~20 min across two failed `azd provision` attempts + log / live-resource inspection. Failure mode A is fully preventable via check #1. Failure mode B's split-provisioning is unavoidable for a first-of-type resource but cheap once expected.
+
 ## Decision
 
 These seven risks are captured as this preflight runbook rather than mitigated in code. Specifically:

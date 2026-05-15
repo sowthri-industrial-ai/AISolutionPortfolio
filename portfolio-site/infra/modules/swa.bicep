@@ -54,9 +54,14 @@ resource swa 'Microsoft.Web/staticSites@2023-12-01' = {
 }
 
 // Optional diagnostic settings → existing LAW (Phase 1 single-pane observability).
-// Available log categories on Microsoft.Web/staticSites (as of 2024+):
-//   - StaticWebAppLogs: HTTP request logs (status, path, latency, edge region)
-// `allMetrics` covers built-in metrics (BytesSent, etc.) — no granular categories yet.
+// Supported log categories on Microsoft.Web/staticSites — verified LIVE via
+// `az monitor diagnostic-settings categories list --resource <swa-id>` (Phase 5a
+// Batch 5). The docs-inferred name 'StaticWebAppLogs' is WRONG; ARM accepts it
+// at template-build time and only rejects it at real provision — see ADR-0003
+// risk #10. Always query the live resource before wiring categories.
+//   - StaticSiteHttpLogs:       HTTP request logs (status, path, latency, edge region)
+//   - StaticSiteDiagnosticLogs: platform / diagnostic logs
+// 'AllMetrics' covers built-in metrics (BytesSent, etc.).
 resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(logAnalyticsWorkspaceId)) {
   name: 'swa-to-law'
   scope: swa
@@ -64,7 +69,11 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
     workspaceId: logAnalyticsWorkspaceId
     logs: [
       {
-        category: 'StaticWebAppLogs'
+        category: 'StaticSiteHttpLogs'
+        enabled: true
+      }
+      {
+        category: 'StaticSiteDiagnosticLogs'
         enabled: true
       }
     ]

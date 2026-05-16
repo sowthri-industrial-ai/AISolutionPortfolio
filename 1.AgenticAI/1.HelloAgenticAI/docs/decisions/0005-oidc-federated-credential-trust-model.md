@@ -53,6 +53,7 @@ Negative (and mitigations):
 - A mis-typed `subject` fails silently — auth just doesn't work at run time, with no creation-time error. *Mitigation:* the runbook echoes the exact subject for eyeball review before creation; the Phase 5b `workflow_dispatch` run is the validation gate (the ADR-0003 "a later layer catches it" discipline applied to identity config).
 - Splitting trust (5b) from privilege (5c) is two approval rounds instead of one. *Mitigation:* deliberate — it keeps each grant minimal and explicitly reviewed, consistent with CLAUDE.md workflow rule 4.
 - Per-environment federated credentials mean more credentials to manage as 5c/5d land. *Mitigation:* one `az ad app delete` still revokes the entire app and all of them.
+- `workflow_dispatch` verification cannot precede merge — GitHub dispatches a `workflow_dispatch` workflow only once it is on the default branch (ADR-0003 risk #12), so the OIDC chain is verified from `main` post-merge, not pre-merge. *Mitigation:* acceptable for 5b **only because it grants zero RBAC and zero secrets** — the merged-but-unrun workflow is inert. Phases 5c/5d attach RG-scoped privilege and must **not** inherit merge-before-verify; they require a non-privileged verification path before the privileged workflow reaches `main`.
 
 ## Scope
 

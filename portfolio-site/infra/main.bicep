@@ -57,7 +57,12 @@ module swa 'modules/swa.bicep' = {
     // 'stapp-helloai-portfolio-${env}-${token}' = up to 41 chars in dev — well under the 60 ceiling.
     name: 'stapp-helloai-portfolio-${environmentName}-${resourceToken}'
     location: location
-    tags: tags
+    // azd binds an azure.yaml service to its Azure resource by the
+    // 'azd-service-name' tag — value MUST equal the services.<key> in
+    // azure.yaml (here: 'portfolio'). Not an ARM concept, so neither
+    // `az bicep build`, `azd provision --preview`, nor `azd provision`
+    // flag its absence — only `azd deploy` does (see ADR-0003 risk #11).
+    tags: union(tags, { 'azd-service-name': 'portfolio' })
     logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
   }
 }

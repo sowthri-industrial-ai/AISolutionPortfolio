@@ -297,9 +297,41 @@ BadRequest: Category 'StaticWebAppLogs' is not supported.
 
 **Discovery cost:** ~20 min across two failed `azd provision` attempts + log / live-resource inspection. Failure mode A is fully preventable via check #1. Failure mode B's split-provisioning is unavoidable for a first-of-type resource but cheap once expected.
 
+### 11. azd has a validation layer beyond ARM, exposed only at `azd deploy`
+
+**Surfaced in:** Phase 5a Batch 6 — `azd deploy` failed on a missing `azd-service-name` tag despite `az bicep build`, `azd provision --preview`, and `azd provision` all reporting green (and the SWA being live and serving its placeholder page).
+
+```
+ERROR: getting target resource: resource not found: unable to find a
+resource tagged with 'azd-service-name: portfolio'. Ensure the service
+resource is correctly tagged in your infrastructure configuration, and
+rerun provision
+```
+
+**Root cause:** azd's resource-to-service mapping uses tag-based resolution — `azd deploy <svc>` looks for a resource in the RG tagged `azd-service-name: <serviceName>`, where `<serviceName>` is the `services.<key>` entry in `azure.yaml`. This tag is an azd convention, **not ARM-required**. None of the standard validation gates (`az bicep build`, ARM What-If via `--preview`, ARM `Validating deployment` during `azd provision`) check for it because it has no ARM semantics. The failure surfaces only at the `azd deploy` step — after a fully green provision.
+
+**Workaround in tree:** tag added in `portfolio-site/infra/main.bicep` via `union(tags, { 'azd-service-name': 'portfolio' })` on the swa module call, so the `swa.bicep` module signature stays generic (the service-name coupling lives with the azure.yaml wiring in main.bicep, not in the reusable module).
+
+**Verification protocol:** before adding a new service to `azure.yaml`, ensure the corresponding resource (or its module wiring in `main.bicep`) carries the `azd-service-name: <key>` tag where `<key>` matches the `azure.yaml` `services.<key>` entry exactly. Quick post-provision check:
+
+```bash
+az resource list -g <rg> --query "[].tags.\"azd-service-name\"" -o tsv
+```
+
+**Pattern — four latent gates between Bicep authorship and live operations:**
+
+| Gate | Catches |
+|---|---|
+| `az bicep build` | syntax + Bicep type errors |
+| `azd provision --preview` | ARM What-If: deployment-graph resolution |
+| `azd provision` | ARM `Validating deployment`: region/SKU availability, provider validation (risk #10) |
+| `azd deploy` | azd tooling-convention layer: `azd-service-name` tag binding (this risk) |
+
+Each layer catches a different bug class; an earlier gate passing says nothing about a later one. When introducing a new resource/service, pre-flight across **all four** rather than trusting a green provision — risks #10 and #11 are the same lesson at two different layers (provision-time vs deploy-time), discovered in consecutive batches.
+
 ## Decision
 
-These seven risks are captured as this preflight runbook rather than mitigated in code. Specifically:
+These risks are captured as this preflight runbook rather than mitigated in code. Specifically:
 
 - **No capacity fallback** in `infra/modules/openai.bicep` — silent downgrades violate the user's "never silently downgrade" rule.
 - **No runtime region selection** — region is a deliberate architectural choice per `docs/ARCHITECTURE.md` and project memory.

@@ -1,0 +1,15 @@
+# Astro build output + caches
+dist/
+.astro/
+
+# Node deps
+node_modules/
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# OS / editor noise
+.DS_Store
+*.log

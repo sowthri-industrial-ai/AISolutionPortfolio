@@ -1,0 +1,36 @@
+---
+// GitHub link — icon + label, opens repo source in a new tab.
+// Renders nothing when `path` is undefined (null-safe per
+// kickoff §3 — projects without a public repo path simply omit
+// the source link, no broken UI).
+//
+// `path` is the in-repo path under
+//   https://github.com/sowthri-industrial-ai/AISolutionPortfolio/tree/main/
+// e.g. "1.AgenticAI/1.HelloAgenticAI".
+
+interface Props {
+  /** In-repo path; undefined → component renders nothing. */
+  path?: string;
+  /** Override the link label. Default: "View source". */
+  label?: string;
+}
+const { path, label = 'View source' } = Astro.props;
+
+const REPO_BASE = 'https://github.com/sowthri-industrial-ai/AISolutionPortfolio/tree/main';
+---
+
+{
+  path && (
+    <a
+      href={`${REPO_BASE}/${path}`}
+      class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 transition-colors hover:text-slate-900"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.69.08-.69 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.27-5.24-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.17.92-.26 1.91-.39 2.89-.4.98.01 1.97.14 2.89.4 2.2-1.48 3.16-1.17 3.16-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.37-5.25 5.66.41.36.78 1.07.78 2.16v3.2c0 .31.21.68.8.56C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z" />
+      </svg>
+      <span>{label}</span>
+    </a>
+  )
+}

@@ -1,0 +1,73 @@
+---
+// One vertical section of the home page for a single track. Renders:
+//   1. Section header (track number + name + one-line description)
+//   2. Either: a 2-column responsive grid of <ProjectCard>s
+//      Or:    a "Coming soon" placeholder when the track has zero entries
+//
+// Track metadata (display name + visitor-facing description) lives
+// here rather than in each project's frontmatter — every project in
+// a track shares the same track framing, and centralising it avoids
+// drift if multiple projects start setting slightly-different track
+// labels.
+
+import { getCollection } from 'astro:content';
+import ProjectCard from './ProjectCard.astro';
+
+interface Props {
+  track: 'agentic-ai' | 'assets-ai' | 'physical-ai';
+}
+const { track } = Astro.props;
+
+// DRAFT — Sowthri review the track titles and one-line descriptions
+// before PR #6 opens. Visitor-facing first-impression copy.
+const TRACK_META = {
+  'agentic-ai': {
+    label: 'Track 1 · Agentic AI',
+    description:
+      'Foundational frameworks and applied agent loops — planning, tool use, reflection, replanning — built for production observability.',
+  },
+  'assets-ai': {
+    label: 'Track 2 · Industrial Assets AI',
+    description:
+      'AI for plants, processes, and physical assets — digital twins, sensor analytics, and agent-driven control.',
+  },
+  'physical-ai': {
+    label: 'Track 3 · Physical AI',
+    description: 'Embodied AI, robotics, and vision-language-action systems.',
+  },
+} as const;
+
+const meta = TRACK_META[track];
+
+const all = await getCollection('projects');
+const projects = all
+  .filter((p) => p.data.track === track)
+  .sort((a, b) => a.data.order - b.data.order);
+---
+
+<section class="mb-12">
+  <header class="mb-4">
+    <h2 class="mb-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+      {meta.label}
+    </h2>
+    <p class="text-sm leading-relaxed text-slate-600">{meta.description}</p>
+  </header>
+
+  {
+    projects.length > 0 ? (
+      <div class="grid gap-4 sm:grid-cols-2">
+        {projects.map((project) => (
+          <ProjectCard project={project} />
+        ))}
+      </div>
+    ) : (
+      <div class="rounded-lg border border-dashed border-slate-300 bg-white/50 p-6">
+        <p class="text-sm font-medium text-slate-700">Coming soon</p>
+        <p class="mt-1 text-sm text-slate-500">
+          Projects in this track are in early planning. The track is part of the portfolio's
+          three-axis structure; entries will land here as work begins.
+        </p>
+      </div>
+    )
+  }
+</section>

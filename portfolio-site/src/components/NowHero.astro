@@ -1,0 +1,30 @@
+---
+// Home-page "Now" hero — small uppercase label + the current
+// snapshot text loaded from the `now` content collection's
+// single entry (`now/current.md`).
+//
+// Updating the text = one-file edit at src/content/now/current.md.
+// No component changes required.
+
+import { getEntry, render } from 'astro:content';
+
+const entry = await getEntry('now', 'current');
+if (!entry) {
+  throw new Error(
+    'NowHero: missing required content entry now/current.md — see src/content/config.ts',
+  );
+}
+const { Content } = await render(entry);
+---
+
+<section
+  class="mb-10 rounded-lg border border-slate-200 bg-white px-6 py-5 shadow-sm"
+  aria-labelledby="now-heading"
+>
+  <h2 id="now-heading" class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+    Now
+  </h2>
+  <div class="prose prose-slate max-w-none text-base text-slate-800 prose-p:my-0">
+    <Content />
+  </div>
+</section>

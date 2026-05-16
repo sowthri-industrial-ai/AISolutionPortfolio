@@ -1,0 +1,87 @@
+---
+// Project profile-page layout. Wraps a project's hero (title +
+// status pill + tagline), CTA row (GitHub + Live demo if applicable),
+// full tech-stack table, and the markdown body slot.
+//
+// The markdown body comes through Astro's <slot /> (the [...slug].astro
+// route renders <Content /> into it via <render(entry).Content>).
+//
+// Phase 5b will slot <ArchitectureDiagram path={architectureDocPath} />
+// into the placeholder marked below — comment-only for now.
+
+import type { CollectionEntry } from 'astro:content';
+import BaseLayout from './BaseLayout.astro';
+import DemoStatusIndicator from '../components/DemoStatusIndicator.astro';
+import TechStackTable from '../components/TechStackTable.astro';
+import GitHubLink from '../components/GitHubLink.astro';
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+}
+const { project } = Astro.props;
+const { title, status, tagline, techStack, githubPath, demoUrl } = project.data;
+
+const showLaunchDemo = status === 'Live' && demoUrl;
+---
+
+<BaseLayout title={`${title} · AI Solution Portfolio`} description={tagline}>
+  <article>
+    {/* Hero — title + status + tagline */}
+    <header class="mb-8">
+      <p class="mb-3">
+        <a
+          href="/"
+          class="inline-flex items-center gap-1 text-sm text-slate-600 transition-colors hover:text-slate-900"
+        >
+          ← All projects
+        </a>
+      </p>
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <h1 class="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          {title}
+        </h1>
+        <DemoStatusIndicator status={status} />
+      </div>
+      <p class="text-lg leading-relaxed text-slate-700">{tagline}</p>
+    </header>
+
+    {/* CTAs row */}
+    <div class="mb-10 flex flex-wrap items-center gap-x-6 gap-y-3">
+      <GitHubLink path={githubPath} />
+      {
+        showLaunchDemo && (
+          <a
+            href={demoUrl}
+            class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Launch demo →
+          </a>
+        )
+      }
+    </div>
+
+    {/* Tech stack — full list, no truncation on profile pages */}
+    <section class="mb-10">
+      <h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Tech stack</h2>
+      <TechStackTable items={techStack} />
+    </section>
+
+    {/* Markdown body — rendered via @tailwindcss/typography's prose class */}
+    <section
+      class="prose prose-slate max-w-none prose-headings:tracking-tight prose-a:text-emerald-700 hover:prose-a:text-emerald-900"
+    >
+      <slot />
+    </section>
+
+    {
+      /*
+      Phase 5b — <ArchitectureDiagram path={architectureDocPath} /> slots
+      in here. Renders the project's docs/ARCHITECTURE.md mermaid diagram
+      via rehype-mermaid. Deferred per ADR-0002 + the kickoff readout's
+      "deferred deps" list.
+    */
+    }
+  </article>
+</BaseLayout>

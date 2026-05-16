@@ -1,0 +1,34 @@
+---
+// Status pill — coloured-dot + label, used on cards and (Batch 4) on
+// project profile page headers. Identical shape across all three
+// statuses; only the colour differs.
+//
+// Colour choices (visitor-friendly defaults Sowthri can override):
+//   Live          → emerald (positive, "click here, it works")
+//   In Development → amber  ("real but not yet shippable")
+//   Planned       → slate  ("on the roadmap, not yet started")
+
+interface Props {
+  status: 'Live' | 'In Development' | 'Planned';
+}
+const { status } = Astro.props;
+
+const PILL_STYLES = {
+  Live: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+  'In Development': 'border-amber-300 bg-amber-50 text-amber-900',
+  Planned: 'border-slate-300 bg-slate-100 text-slate-700',
+} as const;
+
+const DOT_STYLES = {
+  Live: 'bg-emerald-500',
+  'In Development': 'bg-amber-500',
+  Planned: 'bg-slate-400',
+} as const;
+---
+
+<span
+  class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${PILL_STYLES[status]}`}
+>
+  <span class={`h-1.5 w-1.5 rounded-full ${DOT_STYLES[status]}`} aria-hidden="true"></span>
+  {status}
+</span>

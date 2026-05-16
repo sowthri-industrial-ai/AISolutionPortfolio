@@ -1,0 +1,38 @@
+---
+// Tech-stack chip list. Two display modes:
+//
+//   <TechStackTable items={[...]} limit={4} />
+//     → renders first 4 chips + a muted "+N more" tail when items.length > 4.
+//        Used on home-page <ProjectCard> to keep cards compact.
+//
+//   <TechStackTable items={[...]} />
+//     → renders every item. Used on project profile pages (Batch 4).
+//
+// The component is a list semantically (<ul>/<li>) so screen readers
+// announce it as a tech list, not visual chrome.
+
+interface Props {
+  items: string[];
+  /** Cap visible chips. Omit / set to undefined to show all. */
+  limit?: number;
+}
+const { items, limit } = Astro.props;
+
+const visible = limit !== undefined ? items.slice(0, limit) : items;
+const overflow = limit !== undefined && items.length > limit ? items.length - limit : 0;
+---
+
+<ul class="flex flex-wrap gap-1.5">
+  {
+    visible.map((item) => (
+      <li class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{item}</li>
+    ))
+  }
+  {
+    overflow > 0 && (
+      <li class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+        +{overflow} more
+      </li>
+    )
+  }
+</ul>

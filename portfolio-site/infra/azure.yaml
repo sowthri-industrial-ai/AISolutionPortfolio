@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: portfolio
+metadata:
+  template: helloagenticai-portfolio@0.1.0
+
+infra:
+  provider: bicep
+  path: .
+  module: main
+
+# Service definition for Option A (azd-managed deploy).
+# `azd deploy portfolio` runs `npm ci && npm run build` via the prepackage hook,
+# then uploads `dist/` to the Static Web App via the SWA CLI under the hood.
+#
+# If we pick Option B (GitHub Actions via Azure/static-web-apps-deploy), this
+# block stays harmless — `azd provision` ignores it; only `azd deploy` uses it.
+# The workflow file would live at `.github/workflows/portfolio-deploy.yml` and
+# auth via the SWA deploy token (see swa.bicep header comment for token-fetch).
+services:
+  portfolio:
+    project: ..
+    language: js
+    host: staticwebapp
+    dist: dist
+    hooks:
+      prepackage:
+        shell: sh
+        run: npm ci && npm run build
+        continueOnError: false

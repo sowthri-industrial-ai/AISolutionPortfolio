@@ -45,6 +45,7 @@ Positive:
 - No secret exists anywhere — nothing to rotate, expire, or exfiltrate.
 - Required-reviewer on the `oidc-verify` environment puts a human gate before any token mint.
 - 5b blast radius is effectively nil: a worst-case mis-scoped subject yields a token that can do nothing beyond `az account show`.
+- **GitHub Actions are SHA-pinned, not tag-pinned:** 5b's verify workflow is the seed for 5c/5d's privileged deploy pipeline (RG-scoped Contributor + User Access Administrator), so the immutable-pin posture is established before privilege is attached — a mutable tag would otherwise be a supply-chain entry point into the tenant once those roles exist.
 - **Rollback is one command:** `az ad app delete --id $APP_ID` removes the app registration, its service principal, all federated credentials, and all role assignments held by that SP. No resource-group data is touched; no secret needs revoking because none exists. Removing a single trust path instead is `az ad app federated-credential delete`.
 
 Negative (and mitigations):

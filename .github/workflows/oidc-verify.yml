@@ -1,0 +1,31 @@
+name: oidc-verify
+
+# Phase 5b — prove GitHub Actions → Azure OIDC works. No secrets.
+# Manual only; the job binds to the `oidc-verify` GitHub Environment, which
+# carries a required-reviewer gate (no OIDC token is minted until Sowthri
+# approves the run). Rationale + the deliberate absence of any RBAC step:
+# docs/decisions/0005-oidc-federated-credential-trust-model.md.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required: lets the job request the GitHub OIDC token
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: oidc-verify   # third leg of the three-way agreement;
+                               # must equal the federated-credential subject's
+                               # environment segment and the GH env name
+    steps:
+      - name: Azure login via OIDC (no secret)
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5  # v2.3.0 — pinned for supply-chain integrity (see ADR-0005)
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prove the OIDC token works (read-only, zero RBAC)
+        run: az account show -o table

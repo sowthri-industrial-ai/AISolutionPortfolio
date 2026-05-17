@@ -329,6 +329,20 @@ az resource list -g <rg> --query "[].tags.\"azd-service-name\"" -o tsv
 
 Each layer catches a different bug class; an earlier gate passing says nothing about a later one. When introducing a new resource/service, pre-flight across **all four** rather than trusting a green provision — risks #10 and #11 are the same lesson at two different layers (provision-time vs deploy-time), discovered in consecutive batches.
 
+### 12. `workflow_dispatch` verification is inert until the workflow reaches the default branch
+
+**Surfaced in:** Phase 5b Batch 5 prep — `.github/workflows/oidc-verify.yml` authored, committed, pushed to `phase-5b-oidc`, valid YAML, structure asserted. `gh workflow list` for the repo returned **empty**; no "Run workflow" control in the Actions UI.
+
+**Root cause:** GitHub registers and dispatches a `workflow_dispatch` workflow only once the file exists on the repository's **default branch**. While it lives only on a feature branch, the Actions UI, the dispatch REST API, and `gh workflow run` do not see it at all. This is a GitHub-platform rule, independent of OIDC/auth/the (triple-verified, correct) federated-credential subject — it would block *any* `workflow_dispatch` workflow living only on a feature branch.
+
+**Workaround in tree:** reorder so the PR/merge to the default branch precedes the dispatch verification; the OIDC chain is verified from the default branch post-merge. **Safe for Phase 5b only because 5b is `workflow_dispatch`-only, zero-RBAC, zero-secret — the merged-but-unrun workflow is completely inert.** NOT a general licence to merge-before-verify: privileged phases (5c/5d, attaching RG-scoped Contributor + User Access Administrator) must verify by a non-privileged path *before* the privileged workflow reaches the default branch — keep a minimal trust-only workflow (the 5b pattern) separate from the privileged pipeline so trust is re-verifiable without merging privilege first.
+
+**Verification protocol:** after pushing a new `workflow_dispatch` workflow on a feature branch, expect it undispatchable until merged — do not plan a pre-merge dispatch gate for it. Confirm registration with `gh workflow list --repo <repo>` (empty/absent ⇒ not on the default branch yet; presence on the branch via `git ls-tree` is necessary but not sufficient). For anything that will carry privilege, design verification that does not require the privileged workflow on the default branch first.
+
+**Pattern:** extends the four-gate table — even a correct, committed, pushed, valid workflow file is **inert for `workflow_dispatch` until it reaches the default branch**. Same family as #10/#11: every local/CLI/push gate green; a later GitHub-platform layer is where it surfaces. Defence is identical — anticipate the later layer rather than trust an all-green earlier one.
+
+**Discovery cost:** ~0 — caught at Batch 5 prep by checking `gh workflow list` before handing over UI steps, not after fruitless clicking in the Actions tab.
+
 ## Decision
 
 These risks are captured as this preflight runbook rather than mitigated in code. Specifically:

@@ -1,0 +1,38 @@
+name: evals-trust-verify
+
+# Phase 5c — prove the NEW `environment:evals` federated-credential subject
+# works BEFORE any data-plane role is attached to the SP. This is the
+# risk-#12 non-privileged verification path: it is inert (zero RBAC, zero
+# secrets, workflow_dispatch-only) so it is safe to merge-before-run exactly
+# like 5b's oidc-verify. A green run here proves the new subject end-to-end
+# WITHOUT privilege; only after that do the 5 data-plane roles get attached
+# (separate isolated hard-gated batch), then the privileged evals.yml lands.
+# Rationale + the eval-vs-deploy privilege split:
+# docs/decisions/0006-eval-vs-deploy-privilege-split.md (see also ADR-0005,
+# ADR-0003 risk #12). azure/login SHA-pinned identically to oidc-verify;
+# Node-20->24 bump tracked in ADR-0006.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required: lets the job request the GitHub OIDC token
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: evals   # binds the run to the NEW `evals` GitHub Environment
+                         # (own required-reviewer gate); makes the OIDC subject
+                         # repo:sowthri-industrial-ai/AISolutionPortfolio:environment:evals
+                         # — must equal the new federated-credential subject
+    steps:
+      - name: Azure login via OIDC (no secret)
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5  # v2.3.0 — pinned for supply-chain integrity (see ADR-0005 / ADR-0006)
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Prove the OIDC token works (zero RBAC, tenant-level)
+        run: az account show --query "{tenant:tenantId, principal:user.name, principalType:user.type}" -o json

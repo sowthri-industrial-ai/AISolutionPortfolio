@@ -95,14 +95,56 @@ Then run `.github/workflows/oidc-verify.yml` via `workflow_dispatch`. Success = 
 
 ---
 
-## Phase 5c+ — deferred privilege (DO NOT run until Phase 5c, separately approved)
+## Phase 5c — eval data-plane grant (AUTHORIZED 2026-05-19)
 
-When CI must actually *do* things (run `azd up`, evals against live Azure), add — **per explicit Sowthri approval at 5c, not now**:
+Per ADR-0006, Phase 5c grants the SP **only the 5 RG-scoped data-plane roles** the eval workflow needs to run the real agent against live Azure — **NOT** `Contributor`/`UAA` (that is the deploy privilege, deferred — see next section). Staged per ADR-0003 risk #12: new credential + environment first, an inert trust-verify proves the new subject with zero privilege, **then** these roles, **then** the privileged `evals.yml`. Run only at the Phase 5c privilege-grant batch, command-by-command, output-verified each step.
 
-- Additional environment-scoped federated credentials, one per workflow surface (e.g. `environment:evals`, `environment:portfolio-demo`) — never a repo-wide or `pull_request` subject.
-- RBAC, **scoped to the resource group, not the subscription**:
+New environment-scoped federated credential (subject scrutinized char-for-char before running):
 
 ```bash
+az ad app federated-credential create \
+    --id "$APP_ID" \
+    --parameters '{
+        "name": "github-env-evals",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "repo:sowthri-industrial-ai/AISolutionPortfolio:environment:evals",
+        "audiences": ["api://AzureADTokenExchange"]
+    }'
+```
+
+The 5 data-plane roles (GUIDs in ADR-0006 / `TODO-phase-5-data-plane-rbac.md`), RG-scoped, assignee = the OIDC SP object id `4bc75532-91d1-4b68-8a60-019e6611bce0`:
+
+```bash
+SUB=d599c6a3-6859-4aae-8c0e-63674a3b0704
+RG=rg-helloagenticai-dev
+SP=4bc75532-91d1-4b68-8a60-019e6611bce0   # az ad sp show --id "$APP_ID" --query id -o tsv
+
+# 4 standard-RBAC data-plane roles, RG-scoped:
+for ROLE in \
+  "Cognitive Services OpenAI User" \
+  "Cognitive Services User" \
+  "Storage Blob Data Contributor" \
+  "Key Vault Secrets User" ; do
+  az role assignment create --assignee-object-id "$SP" --assignee-principal-type ServicePrincipal \
+      --role "$ROLE" --scope "/subscriptions/$SUB/resourceGroups/$RG"
+done
+
+# Cosmos uses its OWN RBAC system — DIFFERENT command, account-scoped:
+COSMOS=$(az cosmosdb list -g "$RG" --query "[0].name" -o tsv)
+az cosmosdb sql role assignment create \
+    --account-name "$COSMOS" --resource-group "$RG" --scope "/" \
+    --principal-id "$SP" \
+    --role-definition-id "00000000-0000-0000-0000-000000000002"   # Cosmos DB Built-in Data Contributor
+```
+
+Propagation (ADR-0003 risk #7): Cosmos/Storage typically <2 min; AOAI/Content Safety 15–45 min. A first `evals.yml` 401/403 right after granting is propagation lag, **not** a trust failure — the inert trust-verify already proved the subject.
+
+## Deploy privilege — Contributor + User Access Administrator (DEFERRED — NOT Phase 5c)
+
+**DO NOT run these.** Per ADR-0006, `Contributor` + `User Access Administrator` is **deliberately deferred** — it is the deploy (`azd up`) privilege, has **no consumer** (no `deploy.yml` exists), and is the project's highest-blast-radius grant (UAA-on-RG = escalate to anything in `rg-helloagenticai-dev`; Contributor = create/modify/delete every resource in it). This deferral is a decision, not an oversight.
+
+```bash
+# DEFERRED — for the future deploy phase ONLY, never the eval credential:
 SUB=d599c6a3-6859-4aae-8c0e-63674a3b0704
 RG=rg-helloagenticai-dev
 az role assignment create --assignee-object-id "$SP_OBJECT_ID" --assignee-principal-type ServicePrincipal \
@@ -111,7 +153,7 @@ az role assignment create --assignee-object-id "$SP_OBJECT_ID" --assignee-princi
     --role "User Access Administrator"    --scope "/subscriptions/$SUB/resourceGroups/$RG"
 ```
 
-`User Access Administrator` is required because `infra/main.bicep` creates role assignments for the runtime managed identity. **This is the explicit downgrade from the original subscription-wide grant** (ADR-0005): RG scope contains blast radius to `rg-helloagenticai-dev`. If `azd up` needs to *create* the RG, pre-create it (`az group create -n rg-helloagenticai-dev -l swedencentral`) so the RG-scoped assignment can exist first. The declarative data-plane grants for this SP are tracked in `docs/decisions/TODO-phase-5-data-plane-rbac.md` (`oidcServicePrincipalId` param).
+`User Access Administrator` is required because `infra/main.bicep` creates role assignments for the runtime managed identity (RG-scoped, the ADR-0005 downgrade from subscription-wide). **Condition to grant later:** a real `deploy.yml` exists and requires it — granted then in its own phase, own hard gate, own ADR, own environment-scoped credential (e.g. `environment:deploy`), never reusing the eval credential. The declarative data-plane grants are tracked in `docs/decisions/TODO-phase-5-data-plane-rbac.md` (`oidcServicePrincipalId` param).
 
 ---
 

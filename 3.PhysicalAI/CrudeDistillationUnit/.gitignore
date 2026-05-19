@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Project artifacts
+out/
+*/out/
+**/out/
+_build/
+_compiler/
+_repo/
+*.tmp
+
+# Secrets — defense in depth (NEVER commit these)
+.env
+.env.*
+*.pem
+*.key
+ngc-api-key.txt
+github-token.txt
+secrets/
+
+# Large media (use docs/media/ with restraint; LFS for >50MB)
+*.mov
+*.mp4.bak
+*.tar.gz
+*.zip

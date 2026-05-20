@@ -1,4 +1,4 @@
-# RefineryTwin — Cloud GPU Environment Specification
+# CrudeDistillationUnit — Cloud GPU Environment Specification
 
 **Date documented:** 2026-05-08
 **Status:** Phase 0 infrastructure complete; Kit application booting and rendering via remote viewer

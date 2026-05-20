@@ -1,4 +1,4 @@
-# Project Charter — Refinery Twin (Omniverse + Isaac Sim)
+# Project Charter — CrudeDistillationUnit (Omniverse + Isaac Sim)
 
 **Status:** Locked. This document is binding. Changes require explicit
 charter revision.

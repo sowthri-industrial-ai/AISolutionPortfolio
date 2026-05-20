@@ -1,4 +1,4 @@
-# Refinery Twin — NVIDIA Omniverse + Isaac Sim
+# CrudeDistillationUnit — NVIDIA Omniverse + Isaac Sim
 
 A real Physical AI demo: Crude Distillation Unit twin in Omniverse Kit
 with live process data binding, plus Isaac Sim scenarios for safety

@@ -139,6 +139,22 @@ az cosmosdb sql role assignment create \
 
 Propagation (ADR-0003 risk #7): Cosmos/Storage typically <2 min; AOAI/Content Safety 15–45 min. A first `evals.yml` 401/403 right after granting is propagation lag, **not** a trust failure — the inert trust-verify already proved the subject.
 
+**Consumer (added Phase 5c Batch 5):** the workflow that exercises these grants is `.github/workflows/evals.yml`. It runs the 10 canonical `EvalCase`s in `demo_fruitmarket/eval/cases.json` against the real fruit-market agent on every pull request to `main`, posts the pass-rate result as a PR comment, and fails the PR if pass rate is below 90% (PROJECT_PLAN.md Phase 5 acceptance). The workflow's job is bound to the `evals` GitHub Environment so the required-reviewer gate fires per PR run.
+
+**Endpoint repo Variables (NON-secret, one-time set):** `evals.yml` reads three resource endpoint URIs from GitHub repo Variables. The OIDC SP already has the 5 data-plane roles to invoke them (above); these variables just tell the runner *which* endpoints to dial. Extract them from `azd env get-values` and set via `gh` (or the UI):
+
+```bash
+REPO=sowthri-industrial-ai/AISolutionPortfolio
+# Inspect the values first (from the project's azd env):
+azd env get-values | grep -E '^(AZURE_OPENAI_ENDPOINT|AZURE_COSMOS_ENDPOINT|AZURE_CONTENT_SAFETY_ENDPOINT)='
+# Then set them as repo Variables (NOT secrets — these are public URIs):
+gh variable set AZURE_OPENAI_ENDPOINT         --body "<from azd>" --repo "$REPO"
+gh variable set AZURE_COSMOS_ENDPOINT         --body "<from azd>" --repo "$REPO"
+gh variable set AZURE_CONTENT_SAFETY_ENDPOINT --body "<from azd>" --repo "$REPO"
+```
+
+`AZURE_CONTENT_SAFETY_ENDPOINT` is optional functionally (the agent fails-open without it, per Phase 4); but the `guardrail-block-*` eval case requires Content Safety to be wired to pass — leaving it unset will fail that case (other 9 still run).
+
 ## Deploy privilege — Contributor + User Access Administrator (DEFERRED — NOT Phase 5c)
 
 **DO NOT run these.** Per ADR-0006, `Contributor` + `User Access Administrator` is **deliberately deferred** — it is the deploy (`azd up`) privilege, has **no consumer** (no `deploy.yml` exists), and is the project's highest-blast-radius grant (UAA-on-RG = escalate to anything in `rg-helloagenticai-dev`; Contributor = create/modify/delete every resource in it). This deferral is a decision, not an oversight.

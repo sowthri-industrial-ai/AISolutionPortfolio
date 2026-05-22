@@ -1,0 +1,80 @@
+name: evals
+
+# Phase 5c Batch 5 — runs the 10 canonical EvalCases
+# (demo_fruitmarket/eval/cases.json) against the real Phase-1 Azure
+# resources on every PR to main, posts the results as a PR comment, and
+# fails the PR if pass rate < 90% (PROJECT_PLAN.md Phase 5 acceptance).
+#
+# Authenticates via OIDC federated credential (no stored secrets) bound
+# to the `evals` GitHub Environment + required-reviewer gate (ADR-0006).
+# The SP holds the 5 RG-scoped data-plane roles attached in Phase 5c
+# Batch 4 — see docs/setup-oidc.md "Phase 5c — eval data-plane grant
+# (AUTHORIZED)" and ADR-0006.
+#
+# Resource endpoint URIs (AZURE_OPENAI_ENDPOINT, AZURE_COSMOS_ENDPOINT,
+# optional AZURE_CONTENT_SAFETY_ENDPOINT) are NON-secret repo Variables —
+# set via `gh variable set ...` from `azd env get-values` output (see
+# setup-oidc.md "Phase 5c" section).
+#
+# azure/login is SHA-pinned identically to oidc-verify and
+# evals-trust-verify; actions/checkout + actions/setup-python are
+# SHA-pinned at v4.3.1 / v5.6.0. The Node-20 -> Node-24 azure/login
+# bump is the same project-wide follow-up tracked in ADR-0006.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write          # OIDC token mint
+  contents: read           # actions/checkout
+  pull-requests: write     # posting the eval-results PR comment
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    environment: evals     # env-scoped federated credential + required-reviewer gate
+    defaults:
+      run:
+        working-directory: 1.AgenticAI/1.HelloAgenticAI
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1 — SHA-pinned
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0 — SHA-pinned
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: uv sync (frozen)
+        run: uv sync --frozen
+
+      - name: Azure login via OIDC (no secret)
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5  # v2.3.0 — pinned for supply-chain integrity (ADR-0005 / ADR-0006)
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run evals
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_COSMOS_ENDPOINT: ${{ vars.AZURE_COSMOS_ENDPOINT }}
+          AZURE_CONTENT_SAFETY_ENDPOINT: ${{ vars.AZURE_CONTENT_SAFETY_ENDPOINT }}
+        run: uv run python scripts/run_evals.py
+
+      - name: Post eval results to PR
+        if: always()                              # post even when the runner exits non-zero
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f eval-results.md ]; then
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --body-file eval-results.md
+          else
+            echo "::warning::eval-results.md was not produced (runner failed before writing it)"
+          fi

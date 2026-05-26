@@ -1,0 +1,20 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1.0
+    upAxis = "Z"
+    customLayerData = {
+        string layer_role = "geometry"
+        string project = "CrudeDistillationUnit"
+    }
+)
+
+def Xform "World"
+{
+    def Xform "RefinerySiteA"
+    {
+        def Xform "CDU_01"
+        {
+        }
+    }
+}

@@ -1,0 +1,15 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1.0
+    upAxis = "Z"
+    subLayers = [
+        @./cdu_geometry.usda@,
+        @./cdu_materials.usda@,
+        @./cdu_metadata.usda@
+    ]
+    customLayerData = {
+        string layer_role = "composition_root"
+        string project = "CrudeDistillationUnit"
+    }
+)
